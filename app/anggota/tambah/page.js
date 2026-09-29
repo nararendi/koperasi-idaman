@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import AppLayout from '../../../components/AppLayout';
 import { dataService } from '../../../lib/dataService';
+import { formatRupiah } from '../../../lib/formatters';
 
 export default function TambahAnggotaPage() {
   const router = useRouter();
@@ -278,7 +279,7 @@ export default function TambahAnggotaPage() {
               />
               <label htmlFor="setorSimpananPokok" className="cursor-pointer">
                 <span className="font-extrabold text-[#0f172a] block">
-                  Otomatis Catat Setoran Simpanan Pokok Awal (Rp {Number(settings.simpananPokok || 500000).toLocaleString('id-ID')})
+                  Otomatis Catat Setoran Simpanan Pokok Awal ({formatRupiah(settings.simpananPokok || 500000)})
                 </span>
                 <span className="text-slate-600 block text-[11px] mt-0.5 font-medium">
                   Mencatat mutasi Simpanan Pokok sebesar biaya pendaftaran awal dan membukukan langsung ke Penerimaan Kas Koperasi.
