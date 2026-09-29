@@ -6,6 +6,7 @@ import AppLayout from '../../components/AppLayout';
 import Pagination from '../../components/Pagination';
 import { dataService } from '../../lib/dataService';
 import { excelExport } from '../../lib/excelExport';
+import { formatRupiah } from '../../lib/formatters';
 
 export default function DaftarAnggotaPage() {
   const [anggotaList, setAnggotaList] = useState([]);
@@ -389,7 +390,7 @@ export default function DaftarAnggotaPage() {
                 <div>
                   <span className="text-slate-400 font-bold block">Total Saldo Simpanan:</span>
                   <span className="font-extrabold text-[#2563eb] text-sm">
-                    Rp {Number(selectedAnggota?.totalSimpanan || 0).toLocaleString('id-ID')}
+                    {formatRupiah(selectedAnggota?.totalSimpanan || 0)}
                   </span>
                 </div>
                 <div className="col-span-2 sm:col-span-3">
@@ -422,7 +423,7 @@ export default function DaftarAnggotaPage() {
                           <tr key={s.id}>
                             <td className="px-3 py-2 text-slate-600">{s.tanggal}</td>
                             <td className="px-3 py-2 font-bold text-[#2563eb]">{s.jenis}</td>
-                            <td className="px-3 py-2 text-right font-extrabold">Rp {Number(s.jumlah || 0).toLocaleString('id-ID')}</td>
+                            <td className="px-3 py-2 text-right font-extrabold">{formatRupiah(s.jumlah || 0)}</td>
                             <td className="px-3 py-2 text-slate-500">{s.keterangan}</td>
                           </tr>
                         ))}
@@ -455,10 +456,10 @@ export default function DaftarAnggotaPage() {
                         {selectedAnggota.pinjamanList.map((p) => (
                           <tr key={p.id}>
                             <td className="px-3 py-2 font-mono text-[#2563eb]">{p.nomor_pinjaman || p.id}</td>
-                            <td className="px-3 py-2 font-bold">Rp {Number(p.jumlah || 0).toLocaleString('id-ID')}</td>
+                            <td className="px-3 py-2 font-bold">{formatRupiah(p.jumlah || 0)}</td>
                             <td className="px-3 py-2">{getStatusBadge(p.status)}</td>
                             <td className="px-3 py-2 text-right font-extrabold text-rose-500">
-                              Rp {Number(p.sisa_hutang || 0).toLocaleString('id-ID')}
+                              {formatRupiah(p.sisa_hutang || 0)}
                             </td>
                           </tr>
                         ))}
