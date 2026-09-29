@@ -380,7 +380,7 @@ export default function SimpananPage() {
                 <th className="px-4 py-3.5 text-right">Simp. Pokok</th>
                 <th className="px-4 py-3.5 text-right">Simp. Wajib</th>
                 <th className="px-4 py-3.5 text-right">Simp. Sukarela</th>
-<th className="px-4 py-3.5 text-right">Total Simpanan</th>
+                <th className="px-4 py-3.5 text-right">Total Simpanan</th>
                 <th className="px-4 py-3.5 text-center w-24">Riwayat</th>
               </tr>
             </thead>
