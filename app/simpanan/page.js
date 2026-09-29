@@ -622,7 +622,7 @@ export default function SimpananPage() {
                         formData.tipe === 'Setoran'
                           ? 'bg-[#2563eb] text-white border-[#2563eb] shadow-xs'
                           : 'bg-white text-slate-600 border-slate-200 hover:bg-[#f8fafc]'
-                      }`}
+                      }`}\
                     >
                       + Setoran Masuk
                     </button>
