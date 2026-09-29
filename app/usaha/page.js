@@ -6,6 +6,7 @@ import RupiahInput from '../../components/RupiahInput';
 import { dataService } from '../../lib/dataService';
 import { excelExport } from '../../lib/excelExport';
 import { pdfExport } from '../../lib/pdfExport';
+import { formatRupiah, formatNominal } from '../../lib/formatters';
 
 export default function UsahaPage() {
   const [activeTab, setActiveTab] = useState('sembako'); // 'sembako' | 'qurban' | 'rekap'
@@ -89,7 +90,6 @@ export default function UsahaPage() {
     return () => window.removeEventListener('koperasi_db_updated', handleUpdate);
   }, []);
 
-  const formatRupiah = (num) => `Rp ${(Number(num) || 0).toLocaleString('id-ID')}`;
 
   // ==================== SEMBAKO HANDLERS ====================
   const handleOpenTambahProduk = () => {
@@ -180,7 +180,7 @@ export default function UsahaPage() {
     e.preventDefault();
     if (cart.length === 0) return alert('Keranjang belanja masih kosong!');
     const bayarNominal = Number(kasirForm.bayar) || 0;
-    if (bayarNominal < cartTotal) return alert(`Uang pembayaran kurang Rp ${(cartTotal - bayarNominal).toLocaleString('id-ID')}`);
+    if (bayarNominal < cartTotal) return alert(`Uang pembayaran kurang ${formatRupiah(cartTotal - bayarNominal)}`);
 
     let namaPembeliFinal = kasirForm.namaPembeli;
     let nomorAnggotaFinal = '-';

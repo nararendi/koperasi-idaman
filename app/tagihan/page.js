@@ -6,6 +6,8 @@ import Pagination from '../../components/Pagination';
 import { dataService } from '../../lib/dataService';
 import { excelExport } from '../../lib/excelExport';
 import { pdfExport } from '../../lib/pdfExport';
+import { formatRupiah, formatNominal } from '../../lib/formatters';
+import RupiahInput from '../../components/RupiahInput';
 import Link from 'next/link';
 
 export default function TagihanPage() {
@@ -51,7 +53,6 @@ export default function TagihanPage() {
     return () => window.removeEventListener('koperasi_db_updated', handleUpdate);
   }, []);
 
-  const formatRupiah = (num) => `Rp ${(Number(num) || 0).toLocaleString('id-ID')}`;
 
   const filteredList = (tagihanData?.list || []).filter((row) => {
     if (!row) return false;
@@ -427,31 +428,28 @@ export default function TagihanPage() {
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className="font-bold text-slate-700 block mb-1">Simpanan Wajib</label>
-                    <input
-                      type="number"
+                    <RupiahInput
                       value={editForm.wajib}
-                      onChange={(e) => setEditForm({ ...editForm, wajib: e.target.value })}
-                      className="w-full px-3 py-2 bg-[#f8fafc] border border-slate-200 rounded-xl font-bold text-slate-800 outline-none"
+                      onChange={(val) => setEditForm({ ...editForm, wajib: val })}
+                      className="!bg-[#f8fafc] !py-2 !rounded-xl"
                     />
                   </div>
                   <div>
                     <label className="font-bold text-slate-700 block mb-1">Sukarela</label>
-                    <input
-                      type="number"
+                    <RupiahInput
                       value={editForm.sukarela}
-                      onChange={(e) => setEditForm({ ...editForm, sukarela: e.target.value })}
+                      onChange={(val) => setEditForm({ ...editForm, sukarela: val })}
                       placeholder="0"
-                      className="w-full px-3 py-2 bg-[#f8fafc] border border-slate-200 rounded-xl font-bold text-slate-800 outline-none"
+                      className="!bg-[#f8fafc] !py-2 !rounded-xl"
                     />
                   </div>
                   <div>
                     <label className="font-bold text-slate-700 block mb-1">Tabungan Qurban</label>
-                    <input
-                      type="number"
+                    <RupiahInput
                       value={editForm.qurban}
-                      onChange={(e) => setEditForm({ ...editForm, qurban: e.target.value })}
+                      onChange={(val) => setEditForm({ ...editForm, qurban: val })}
                       placeholder="0"
-                      className="w-full px-3 py-2 bg-[#f8fafc] border border-slate-200 rounded-xl font-bold text-slate-800 outline-none"
+                      className="!bg-[#f8fafc] !py-2 !rounded-xl"
                     />
                   </div>
                 </div>
@@ -476,32 +474,29 @@ export default function TagihanPage() {
                   </div>
                   <div>
                     <label className="font-bold text-slate-700 block mb-1">Pokok Pinjaman</label>
-                    <input
-                      type="number"
+                    <RupiahInput
                       value={editForm.pokok}
-                      onChange={(e) => setEditForm({ ...editForm, pokok: e.target.value })}
+                      onChange={(val) => setEditForm({ ...editForm, pokok: val })}
                       placeholder="0"
-                      className="w-full px-3 py-2 bg-[#f8fafc] border border-slate-200 rounded-xl font-bold text-slate-800 outline-none"
+                      className="!bg-[#f8fafc] !py-2 !rounded-xl"
                     />
                   </div>
                   <div>
                     <label className="font-bold text-slate-700 block mb-1">Jasa (Bunga Pinjaman)</label>
-                    <input
-                      type="number"
+                    <RupiahInput
                       value={editForm.jasa}
-                      onChange={(e) => setEditForm({ ...editForm, jasa: e.target.value })}
+                      onChange={(val) => setEditForm({ ...editForm, jasa: val })}
                       placeholder="0"
-                      className="w-full px-3 py-2 bg-[#f8fafc] border border-slate-200 rounded-xl font-bold text-slate-800 outline-none"
+                      className="!bg-[#f8fafc] !py-2 !rounded-xl"
                     />
                   </div>
                   <div>
                     <label className="font-bold text-slate-700 block mb-1">Sembako</label>
-                    <input
-                      type="number"
+                    <RupiahInput
                       value={editForm.sembako}
-                      onChange={(e) => setEditForm({ ...editForm, sembako: e.target.value })}
+                      onChange={(val) => setEditForm({ ...editForm, sembako: val })}
                       placeholder="0"
-                      className="w-full px-3 py-2 bg-[#f8fafc] border border-slate-200 rounded-xl font-bold text-slate-800 outline-none"
+                      className="!bg-[#f8fafc] !py-2 !rounded-xl"
                     />
                   </div>
                 </div>

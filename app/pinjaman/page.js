@@ -120,7 +120,7 @@ export default function PinjamanPage() {
 
     const newLoan = dataService.applyPinjaman(applyForm);
     setApplyModalOpen(false);
-    showToast(`Pengajuan pinjaman baru (${newLoan.nomor_pinjaman}) senilai Rp ${Number(newLoan.jumlah).toLocaleString('id-ID')} berhasil diajukan!`);
+    showToast(`Pengajuan pinjaman baru (${newLoan.nomor_pinjaman}) senilai ${formatRupiah(newLoan.jumlah)} berhasil diajukan!`);
   };
 
   // Change Loan Status (Approve / Reject / Disburse)
