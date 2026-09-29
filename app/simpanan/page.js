@@ -116,7 +116,7 @@ export default function SimpananPage() {
     });
 
     setModalOpen(false);
-    showToast(`Transaksi Simpanan ${formData.jenis} sebesar Rp ${Number(formData.jumlah).toLocaleString('id-ID')} berhasil dicatat!`);
+    showToast(`Transaksi Simpanan ${formData.jenis} sebesar ${formatRupiah(formData.jumlah)} berhasil dicatat!`);
   };
 
   // State Accordion Collapse/Expand per Anggota (Set berisi nomor_anggota yang dibuka)
@@ -380,7 +380,7 @@ export default function SimpananPage() {
                 <th className="px-4 py-3.5 text-right">Simp. Pokok</th>
                 <th className="px-4 py-3.5 text-right">Simp. Wajib</th>
                 <th className="px-4 py-3.5 text-right">Simp. Sukarela</th>
-<th className="px-4 py-3.5 text-right">Total Simpanan</th>
+                <th className="px-4 py-3.5 text-right">Total Simpanan</th>
                 <th className="px-4 py-3.5 text-center w-24">Riwayat</th>
               </tr>
             </thead>
