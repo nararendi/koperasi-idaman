@@ -7,7 +7,7 @@ import Pagination from '../../components/Pagination';
 import RupiahInput from '../../components/RupiahInput';
 import { dataService } from '../../lib/dataService';
 import { excelExport } from '../../lib/excelExport';
-import { hitungSimulasiPinjaman, formatRupiah } from '../../lib/formatters';
+import { hitungSimulasiPinjaman, hitungJadwalAkumulasiPinjaman, formatRupiah, formatNominal } from '../../lib/formatters';
 
 export default function PinjamanPage() {
   const [summary, setSummary] = useState({
@@ -48,7 +48,8 @@ export default function PinjamanPage() {
     pokok: 0,
     bunga: 0,
     metode: 'Tunai',
-    penerima: 'Admin Kasir'
+    penerima: 'Admin Kasir',
+    keterangan: ''
   });
 
   // Modal: Detail Pinjaman & Riwayat Angsuran
@@ -152,45 +153,60 @@ export default function PinjamanPage() {
     return sim.jadwal || [];
   };
 
-  // Open Pay Installment Modal
-  const handleOpenBayarModal = (pinjaman) => {
+  // Open Pay Installment Modal with dynamic accumulation
+  const handleOpenBayarModal = (pinjaman, targetBulan = null) => {
     setSelectedPinjamanBayar(pinjaman);
-    const schedule = getPinjamanSchedule(pinjaman);
-    const paidCount = pinjaman.riwayat_angsuran ? pinjaman.riwayat_angsuran.length : 0;
-    const nextCicilan = Math.min(Number(pinjaman.tenor) || 12, paidCount + 1);
-    const scheduleItem = schedule.find((s) => s.bulanKe === nextCicilan) || schedule[0];
+    const dynamicSchedule = hitungJadwalAkumulasiPinjaman(pinjaman);
 
+    // Tentukan cicilan target: jika targetBulan diberikan gunakan itu,
+    // jika tidak cari cicilan pertama yang belum lunas (status !== 'Lunas')
+    let defaultCicilan = 1;
+    if (targetBulan) {
+      defaultCicilan = Number(targetBulan);
+    } else {
+      const firstUnpaid = dynamicSchedule.find((s) => s.status !== 'Lunas');
+      if (firstUnpaid) {
+        defaultCicilan = firstUnpaid.bulanKe;
+      } else {
+        defaultCicilan = Math.min(Number(pinjaman.tenor) || 12, (pinjaman.riwayat_angsuran ? pinjaman.riwayat_angsuran.length : 0) + 1);
+      }
+    }
+
+    const scheduleItem = dynamicSchedule.find((s) => s.bulanKe === defaultCicilan) || dynamicSchedule[0];
     const initialAmount = scheduleItem
-      ? scheduleItem.totalAngsuran
-      : (pinjaman.total_angsuran_bulanan || Math.round(Number(pinjaman.total_pinjaman) / Number(pinjaman.tenor)));
+      ? (scheduleItem.status === 'Sebagian' ? scheduleItem.sisaKurang : scheduleItem.totalTagihan)
+      : (pinjaman.total_angsuran_bulanan || 0);
 
     setBayarForm({
-      cicilanKe: nextCicilan,
+      cicilanKe: defaultCicilan,
       jumlahBayar: initialAmount,
       pokok: scheduleItem ? scheduleItem.pokok : 0,
       bunga: scheduleItem ? scheduleItem.bunga : 0,
       metode: 'Tunai',
-      penerima: 'Admin Kasir'
+      penerima: 'Admin Kasir',
+      keterangan: `Angsuran ke-${defaultCicilan} Pinjaman ${pinjaman.nama || 'Anggota'} (${pinjaman.nomor_pinjaman || pinjaman.id})`
     });
     setBayarModalOpen(true);
-    showToast(`Pilih cicilan ke berapa yang ingin dibayarkan untuk pinjaman ${pinjaman.nomor_pinjaman || pinjaman.id}`);
   };
 
-  // Handle changing selected installment period
+  // Handle changing selected installment period in modal
   const handleCicilanChange = (cicilanNumber) => {
     const num = Number(cicilanNumber);
-    const schedule = getPinjamanSchedule(selectedPinjamanBayar);
-    const scheduleItem = schedule.find((s) => s.bulanKe === num);
+    if (!selectedPinjamanBayar) return;
+
+    const dynamicSchedule = hitungJadwalAkumulasiPinjaman(selectedPinjamanBayar);
+    const scheduleItem = dynamicSchedule.find((s) => s.bulanKe === num);
 
     if (scheduleItem) {
+      const targetAmount = scheduleItem.status === 'Sebagian' ? scheduleItem.sisaKurang : scheduleItem.totalTagihan;
       setBayarForm((prev) => ({
         ...prev,
         cicilanKe: num,
-        jumlahBayar: scheduleItem.totalAngsuran,
+        jumlahBayar: targetAmount,
         pokok: scheduleItem.pokok,
-        bunga: scheduleItem.bunga
+        bunga: scheduleItem.bunga,
+        keterangan: `Angsuran ke-${num} Pinjaman ${selectedPinjamanBayar.nama || 'Anggota'} (${selectedPinjamanBayar.nomor_pinjaman || selectedPinjamanBayar.id})`
       }));
-      showToast(`Cicilan ke-${num}: Total ${formatRupiah(scheduleItem.totalAngsuran)} (Pokok ${formatRupiah(scheduleItem.pokok)} + Bunga ${formatRupiah(scheduleItem.bunga)})`);
     } else {
       setBayarForm((prev) => ({
         ...prev,
@@ -199,10 +215,14 @@ export default function PinjamanPage() {
     }
   };
 
-  // Submit Installment Payment
+  // Submit Installment Payment with manual flexible amount
   const handleSubmitBayar = (e) => {
     e.preventDefault();
     if (!selectedPinjamanBayar) return;
+    if (!bayarForm.jumlahBayar || Number(bayarForm.jumlahBayar) <= 0) {
+      alert('Masukkan nominal pembayaran angsuran yang valid (lebih dari 0).');
+      return;
+    }
 
     const updated = dataService.payPinjamanInstallment({
       pinjamanId: selectedPinjamanBayar.id,
@@ -211,7 +231,8 @@ export default function PinjamanPage() {
       penerima: bayarForm.penerima,
       angsuranKe: bayarForm.cicilanKe,
       pokok: bayarForm.pokok,
-      bunga: bayarForm.bunga
+      bunga: bayarForm.bunga,
+      keterangan: bayarForm.keterangan
     });
 
     setBayarModalOpen(false);
@@ -222,7 +243,7 @@ export default function PinjamanPage() {
       if (sisa <= 0 || updated.status === 'Lunas') {
         showToast(`🎉 Pembayaran Cicilan ke-${bayarForm.cicilanKe} (${formatRupiah(bayarForm.jumlahBayar)}) berhasil! Pinjaman ${updated.nama} telah LUNAS.`);
       } else {
-        showToast(`✅ Pembayaran Cicilan ke-${bayarForm.cicilanKe} (${formatRupiah(bayarForm.jumlahBayar)}) berhasil! Sisa pinjaman belum lunas: ${formatRupiah(sisa)}`);
+        showToast(`✅ Pembayaran Cicilan ke-${bayarForm.cicilanKe} (${formatRupiah(bayarForm.jumlahBayar)}) berhasil dicatat! Sisa pinjaman belum lunas: ${formatRupiah(sisa)}`);
       }
     }
   };
@@ -699,6 +720,13 @@ export default function PinjamanPage() {
                     </div>
                   )}
 
+                  <div className="text-[11px] bg-white/90 border border-blue-200 rounded-xl p-2.5 text-[#1e40af] flex items-start gap-2 shadow-2xs">
+                    <span className="material-symbols-outlined text-sm text-[#2563eb] shrink-0 mt-0.5">info</span>
+                    <span className="leading-relaxed">
+                      <strong>Fleksibilitas Angsuran:</strong> Pembayaran angsuran tidak harus mengikuti skema cicilan di atas secara kaku. Anggota dapat membayar nominal secara manual/sebagian, dan sisa nominal tunggakan maupun kelebihan bayar akan otomatis diakumulasikan ke cicilan selanjutnya.
+                    </span>
+                  </div>
+
                   {/* Collapsible Monthly Schedule */}
                   <div>
                     <button
@@ -765,121 +793,281 @@ export default function PinjamanPage() {
       )}
 
       {/* MODAL BAYAR ANGSURAN */}
-      {bayarModalOpen && selectedPinjamanBayar && (
-        <div className="fixed inset-0 z-[100] bg-slate-950/40 flex items-center justify-center p-4 sm:p-6 md:pl-64 lg:pl-68 overflow-y-auto animate-fade-in">
-          <div className="bg-white rounded-[28px] sm:rounded-[32px] max-w-md w-full max-h-[88vh] my-auto shadow-2xl border border-slate-100 overflow-hidden flex flex-col animate-pop-in">
-            <div className="p-6 bg-gradient-to-r from-[#1d4ed8] to-[#2563eb] text-white flex justify-between items-center shrink-0">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-xl text-[#ffd159]">payments</span>
-                <h3 className="text-base font-extrabold">Bayar Angsuran Pinjaman</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setBayarModalOpen(false)}
-                className="text-white/80 hover:text-white p-1 rounded-xl hover:bg-white/10"
-              >
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
+      {bayarModalOpen && selectedPinjamanBayar && (() => {
+        const dynamicSchedule = hitungJadwalAkumulasiPinjaman(selectedPinjamanBayar);
+        const activeItem = dynamicSchedule.find((s) => s.bulanKe === Number(bayarForm.cicilanKe)) || dynamicSchedule[0] || {};
+        const skemaAsli = Number(activeItem.skemaAsli) || 0;
+        const akumulasiSebelumnya = Number(activeItem.akumulasiSebelumnya) || 0;
+        const totalDibayarSebelumnya = Number(activeItem.totalDibayar) || 0;
+        const totalTagihanBulanIni = Number(activeItem.totalTagihan) || 0;
+        const sisaWajibBayar = activeItem.status === 'Sebagian' ? activeItem.sisaKurang : totalTagihanBulanIni;
+        const payAmount = Number(bayarForm.jumlahBayar) || 0;
+        const selisih = payAmount - sisaWajibBayar;
+        const nextBulan = (Number(bayarForm.cicilanKe) || 1) + 1;
+        const totalSisaHutang = Number(selectedPinjamanBayar.sisa_hutang) || 0;
 
-            <form onSubmit={handleSubmitBayar} className="flex flex-col flex-1 overflow-hidden">
-              <div className="p-6 overflow-y-auto flex flex-col gap-4 text-xs flex-1">
-                {/* Informasi Pinjaman */}
-                <div className="p-4 bg-[#eff6ff] rounded-2xl border border-[#bfdbfe]">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-[10px] text-slate-500 font-bold">Peminjam:</span>
-                    <span className="font-mono text-[10px] text-[#2563eb] font-bold">{selectedPinjamanBayar.nomor_pinjaman || selectedPinjamanBayar.id}</span>
+        return (
+          <div className="fixed inset-0 z-[100] bg-slate-950/40 flex items-center justify-center p-4 sm:p-6 md:pl-64 lg:pl-68 overflow-y-auto animate-fade-in">
+            <div className="bg-white rounded-[28px] sm:rounded-[32px] max-w-lg w-full max-h-[90vh] my-auto shadow-2xl border border-slate-100 overflow-hidden flex flex-col animate-pop-in">
+              {/* Header */}
+              <div className="p-6 bg-gradient-to-r from-[#1d4ed8] to-[#2563eb] text-white flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center text-[#ffd159]">
+                    <span className="material-symbols-outlined text-2xl">payments</span>
                   </div>
-                  <div className="text-sm font-extrabold text-[#0f172a]">{selectedPinjamanBayar.nama}</div>
-                  <div className="text-[11px] text-slate-500 mt-0.5">Sisa Hutang: <strong className="text-rose-600">{formatRupiah(selectedPinjamanBayar.sisa_hutang || selectedPinjamanBayar.total_pinjaman)}</strong></div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="font-bold text-slate-700 block mb-1">Angsuran Ke- *</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max={selectedPinjamanBayar.tenor || 12}
-                      required
-                      value={bayarForm.cicilanKe}
-                      onChange={(e) => handleCicilanChange(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200 rounded-2xl focus:border-[#2563eb] focus:bg-white outline-none font-bold text-[#0f172a]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Metode Pembayaran</label>
-                    <select
-                      value={bayarForm.metode}
-                      onChange={(e) => setBayarForm({ ...bayarForm, metode: e.target.value })}
-                      className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200 rounded-2xl focus:border-[#2563eb] focus:bg-white outline-none font-semibold text-slate-800"
-                    >
-                      <option value="Tunai">Tunai / Kas</option>
-                      <option value="Transfer Bank">Transfer Bank</option>
-                      <option value="Potong Simpanan Sukarela">Potong Saldo Sukarela</option>
-                    </select>
+                    <h3 className="text-base font-extrabold">Bayar Angsuran Pinjaman</h3>
+                    <p className="text-[11px] text-blue-100 font-medium mt-0.5">
+                      {selectedPinjamanBayar.nomor_pinjaman || selectedPinjamanBayar.id} • {selectedPinjamanBayar.nama}
+                    </p>
                   </div>
                 </div>
-
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Jumlah Bayar (Rp) *</label>
-                  <RupiahInput
-                    required
-                    value={bayarForm.jumlahBayar}
-                    onChange={(val) => setBayarForm({ ...bayarForm, jumlahBayar: val })}
-                    className="font-black text-[#2563eb] bg-[#f8fafc] rounded-2xl text-sm"
-                  />
-                  <span className="text-[10px] text-slate-400 mt-1 block">
-                    Tagihan standar: {formatRupiah(selectedPinjamanBayar.total_angsuran_bulanan || selectedPinjamanBayar.angsuran_pokok)} / bln
-                  </span>
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Penerima Kasir</label>
-                  <input
-                    type="text"
-                    value={bayarForm.penerima}
-                    onChange={(e) => setBayarForm({ ...bayarForm, penerima: e.target.value })}
-                    placeholder="Contoh: Admin Kasir"
-                    className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200 rounded-2xl focus:border-[#2563eb] focus:bg-white outline-none font-semibold text-slate-800 transition-all"
-                  />
-                </div>
-              </div>
-
-              <div className="p-4 bg-[#f8fafc] border-t border-slate-100 flex justify-end gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => setBayarModalOpen(false)}
-                  className="px-4 py-2 border border-slate-200 rounded-full font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+                  className="text-white/80 hover:text-white p-1 rounded-xl hover:bg-white/10 transition-colors"
                 >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2 bg-[#ffd159] hover:bg-[#f7be38] text-[#0f172a] rounded-full font-extrabold shadow-sm transition-all cursor-pointer"
-                >
-                  Simpan Angsuran
+                  <span className="material-symbols-outlined">close</span>
                 </button>
               </div>
-            </form>
+
+              <form onSubmit={handleSubmitBayar} className="flex flex-col flex-1 overflow-hidden">
+                <div className="p-6 overflow-y-auto flex flex-col gap-4 text-xs flex-1">
+                  {/* Summary Pinjaman Card */}
+                  <div className="p-3.5 bg-[#eff6ff] rounded-2xl border border-[#bfdbfe] flex justify-between items-center">
+                    <div>
+                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Peminjam</span>
+                      <span className="font-extrabold text-slate-800 text-sm">{selectedPinjamanBayar.nama}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Sisa Hutang Total</span>
+                      <span className="font-black text-rose-600 text-sm">{formatRupiah(totalSisaHutang)}</span>
+                    </div>
+                  </div>
+
+                  {/* Pilihan Cicilan Ke- & Metode */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">Pilih Angsuran Ke- *</label>
+                      <select
+                        value={bayarForm.cicilanKe}
+                        onChange={(e) => handleCicilanChange(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200 rounded-2xl focus:border-[#2563eb] focus:bg-white outline-none font-bold text-[#0f172a] text-xs transition-all"
+                      >
+                        {dynamicSchedule.map((j) => {
+                          let labelStatus = '';
+                          if (j.status === 'Lunas') labelStatus = '✓ Lunas';
+                          else if (j.status === 'Sebagian') labelStatus = `Sebagian (Kurang ${formatRupiah(j.sisaKurang)})`;
+                          else if (j.akumulasiSebelumnya !== 0) labelStatus = `Belum (${formatRupiah(j.totalTagihan)}*)`;
+                          else labelStatus = `Belum (${formatRupiah(j.totalTagihan)})`;
+
+                          return (
+                            <option key={j.bulanKe} value={j.bulanKe}>
+                              Bulan {j.bulanKe} — {labelStatus}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">Metode Pembayaran</label>
+                      <select
+                        value={bayarForm.metode}
+                        onChange={(e) => setBayarForm({ ...bayarForm, metode: e.target.value })}
+                        className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200 rounded-2xl focus:border-[#2563eb] focus:bg-white outline-none font-semibold text-slate-800 text-xs transition-all"
+                      >
+                        <option value="Tunai">Tunai / Kasir</option>
+                        <option value="Transfer Bank">Transfer Bank / QRIS</option>
+                        <option value="Potong Simpanan Sukarela">Potong Saldo Sukarela</option>
+                        <option value="Potong Gaji">Potong Gaji Otomatis</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Card Rincian Skema & Akumulasi Otomatis */}
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+                    <div className="flex justify-between items-center text-slate-600">
+                      <span>Skema Asli Bulan ke-{bayarForm.cicilanKe}:</span>
+                      <span className="font-semibold">{formatRupiah(skemaAsli)} <span className="text-[10px] text-slate-400">(Pokok {formatRupiah(activeItem.pokok)} + Bunga {formatRupiah(activeItem.bunga)})</span></span>
+                    </div>
+
+                    {akumulasiSebelumnya > 0 && (
+                      <div className="flex justify-between items-center text-rose-700 font-bold bg-rose-50 px-2.5 py-1.5 rounded-xl border border-rose-200">
+                        <span className="flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[15px]">arrow_downward</span>
+                          Akumulasi Sisa/Tunggakan Bulan Lalu:
+                        </span>
+                        <span>+{formatRupiah(akumulasiSebelumnya)}</span>
+                      </div>
+                    )}
+
+                    {akumulasiSebelumnya < 0 && (
+                      <div className="flex justify-between items-center text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-200">
+                        <span className="flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[15px]">savings</span>
+                          Potongan Kelebihan Bayar Bulan Lalu:
+                        </span>
+                        <span>-{formatRupiah(Math.abs(akumulasiSebelumnya))}</span>
+                      </div>
+                    )}
+
+                    {totalDibayarSebelumnya > 0 && (
+                      <div className="flex justify-between items-center text-blue-700 font-semibold bg-blue-50 px-2.5 py-1 rounded-xl">
+                        <span>Sudah Disetor Sebelumnya:</span>
+                        <span>-{formatRupiah(totalDibayarSebelumnya)}</span>
+                      </div>
+                    )}
+
+                    <div className="flex justify-between items-center pt-2 border-t border-slate-200 text-sm font-extrabold text-slate-800">
+                      <span>Target Tagihan Berjalan:</span>
+                      <span className="text-[#2563eb] text-base">{formatRupiah(sisaWajibBayar)}</span>
+                    </div>
+                  </div>
+
+                  {/* Input Jumlah Bayar */}
+                  <div>
+                    <div className="flex justify-between items-baseline mb-1">
+                      <label className="font-bold text-slate-700">Nominal yang Dibayarkan (Rp) *</label>
+                      <span className="text-[10px] text-slate-500 font-medium">Bisa diinput manual bebas</span>
+                    </div>
+                    <RupiahInput
+                      required
+                      value={bayarForm.jumlahBayar}
+                      onChange={(val) => setBayarForm({ ...bayarForm, jumlahBayar: val })}
+                      className="font-black text-[#2563eb] bg-[#f8fafc] rounded-2xl text-base py-3"
+                    />
+                  </div>
+
+                  {/* Tombol Cepat Isi Nominal */}
+                  <div className="flex flex-wrap gap-1.5 items-center">
+                    <span className="text-[10px] font-bold text-slate-400 mr-1">Isi Cepat:</span>
+                    <button
+                      type="button"
+                      onClick={() => setBayarForm({ ...bayarForm, jumlahBayar: sisaWajibBayar })}
+                      className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-[#2563eb] rounded-lg text-[10px] font-bold transition-all border border-blue-200 cursor-pointer"
+                    >
+                      Target Tagihan ({formatRupiah(sisaWajibBayar)})
+                    </button>
+                    {skemaAsli !== sisaWajibBayar && (
+                      <button
+                        type="button"
+                        onClick={() => setBayarForm({ ...bayarForm, jumlahBayar: skemaAsli })}
+                        className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold transition-all border border-slate-200 cursor-pointer"
+                      >
+                        Skema Asli ({formatRupiah(skemaAsli)})
+                      </button>
+                    )}
+                    {totalSisaHutang > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setBayarForm({ ...bayarForm, jumlahBayar: totalSisaHutang })}
+                        className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-bold transition-all border border-emerald-200 cursor-pointer"
+                      >
+                        Pelunasan Penuh ({formatRupiah(totalSisaHutang)})
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Dynamic Live Banner: Dampak Akumulasi Sisa/Kelebihan */}
+                  {payAmount > 0 && (
+                    <div
+                      className={`p-3.5 rounded-2xl border text-[11px] transition-all ${
+                        selisih < 0
+                          ? 'bg-amber-50/80 border-amber-200 text-amber-900'
+                          : selisih > 0
+                          ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
+                          : 'bg-blue-50 border-blue-200 text-blue-900'
+                      }`}
+                    >
+                      {selisih < 0 ? (
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5 font-extrabold text-amber-800">
+                            <span className="material-symbols-outlined text-base text-amber-600">error</span>
+                            <span>Pembayaran Sebagian (Kurang {formatRupiah(Math.abs(selisih))})</span>
+                          </div>
+                          <p className="leading-relaxed text-amber-800">
+                            Sisa nominal kekurangan sebesar <strong>{formatRupiah(Math.abs(selisih))}</strong> akan otomatis <strong>diakumulasikan ke Cicilan ke-{nextBulan}</strong>.
+                          </p>
+                        </div>
+                      ) : selisih > 0 ? (
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5 font-extrabold text-emerald-800">
+                            <span className="material-symbols-outlined text-base text-emerald-600">verified</span>
+                            <span>Pembayaran Lebih (Kelebihan {formatRupiah(selisih)})</span>
+                          </div>
+                          <p className="leading-relaxed text-emerald-800">
+                            Cicilan ini lunas. Kelebihan bayar sebesar <strong>{formatRupiah(selisih)}</strong> akan otomatis <strong>memotong tagihan Cicilan ke-{nextBulan}</strong>.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 font-bold text-blue-800">
+                          <span className="material-symbols-outlined text-base text-[#2563eb]">check_circle</span>
+                          <span>Pembayaran tepat sesuai kewajiban tagihan cicilan ke-{bayarForm.cicilanKe}.</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Keterangan & Kasir */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">Penerima Kasir</label>
+                      <input
+                        type="text"
+                        value={bayarForm.penerima}
+                        onChange={(e) => setBayarForm({ ...bayarForm, penerima: e.target.value })}
+                        placeholder="Contoh: Admin Kasir"
+                        className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200 rounded-2xl focus:border-[#2563eb] focus:bg-white outline-none font-semibold text-slate-800 text-xs transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">Catatan / Keterangan</label>
+                      <input
+                        type="text"
+                        value={bayarForm.keterangan}
+                        onChange={(e) => setBayarForm({ ...bayarForm, keterangan: e.target.value })}
+                        placeholder="Contoh: Setor angsuran sebagian"
+                        className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200 rounded-2xl focus:border-[#2563eb] focus:bg-white outline-none font-semibold text-slate-800 text-xs transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-[#f8fafc] border-t border-slate-100 flex justify-end gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setBayarModalOpen(false)}
+                    className="px-4 py-2 border border-slate-200 rounded-full font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2 bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-full font-extrabold shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    <span className="material-symbols-outlined text-base">check</span>
+                    Simpan Pembayaran
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* MODAL DETAIL PINJAMAN */}
       {detailModalOpen && selectedPinjamanDetail && (() => {
-        const detailSchedule = getPinjamanSchedule(selectedPinjamanDetail);
+        const dynamicDetailSchedule = hitungJadwalAkumulasiPinjaman(selectedPinjamanDetail);
         const totalWajib = Number(selectedPinjamanDetail.total_pinjaman) || 0;
         const totalBayar = Number(selectedPinjamanDetail.total_terbayar) || 0;
         const sisaHutang = Number(selectedPinjamanDetail.sisa_hutang) || 0;
         const isLunas = sisaHutang <= 0 || selectedPinjamanDetail.status === 'Lunas';
         const progressPercent = totalWajib > 0 ? Math.min(100, Math.round((totalBayar / totalWajib) * 100)) : 0;
-        const paidAngsuranKeSet = new Set((selectedPinjamanDetail.riwayat_angsuran || []).map((a) => Number(a.angsuran_ke)));
 
         return (
           <div className="fixed inset-0 z-[100] bg-slate-950/40 flex items-center justify-center p-4 sm:p-6 md:pl-64 lg:pl-68 overflow-y-auto animate-fade-in">
-            <div className="bg-white rounded-[28px] sm:rounded-[32px] max-w-xl w-full max-h-[88vh] my-auto overflow-y-auto shadow-2xl border border-slate-100 flex flex-col animate-pop-in">
+            <div className="bg-white rounded-[28px] sm:rounded-[32px] max-w-2xl w-full max-h-[88vh] my-auto overflow-y-auto shadow-2xl border border-slate-100 flex flex-col animate-pop-in">
               <div className="p-6 bg-gradient-to-r from-[#1d4ed8] to-[#2563eb] text-white flex justify-between items-center rounded-t-[32px]">
                 <div>
                   <h3 className="text-base font-extrabold">Rincian & Status Pinjaman</h3>
@@ -997,43 +1185,97 @@ export default function PinjamanPage() {
                 </div>
 
                 {/* Projected Schedule & Payment Status */}
-                {detailSchedule.length > 0 && (
+                {dynamicDetailSchedule.length > 0 && (
                   <div>
-                    <h4 className="text-xs font-bold text-[#0f172a] mb-2 flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-sm text-[#2563eb]">calendar_month</span>
-                      Jadwal & Status Tagihan Bulanan ({selectedPinjamanDetail.tenor} Bulan)
-                    </h4>
-                    <div className="border border-slate-100 rounded-2xl overflow-hidden max-h-44 overflow-y-auto">
+                    <div className="flex flex-wrap items-center justify-between gap-1 mb-2">
+                      <h4 className="text-xs font-bold text-[#0f172a] flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-sm text-[#2563eb]">calendar_month</span>
+                        Jadwal & Skema Angsuran Terakumulasi ({selectedPinjamanDetail.tenor} Bulan)
+                      </h4>
+                      <span className="text-[10px] text-slate-400">Sisa kekurangan/kelebihan otomatis dialihkan ke bulan berikutnya</span>
+                    </div>
+                    <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-56 overflow-y-auto">
                       <table className="w-full text-left text-[10px]">
                         <thead className="bg-[#eff6ff] text-slate-700 font-bold border-b border-slate-100">
                           <tr>
-                            <th className="p-1.5 text-center">Bln</th>
-                            <th className="p-1.5 text-right">Sisa Pokok</th>
-                            <th className="p-1.5 text-right">Pokok</th>
-                            <th className="p-1.5 text-right">Bunga</th>
-                            <th className="p-1.5 text-right">Total Tagihan</th>
-                            <th className="p-1.5 text-center">Status</th>
+                            <th className="p-2 text-center">Bln</th>
+                            <th className="p-2 text-right">Pokok</th>
+                            <th className="p-2 text-right">Bunga</th>
+                            <th className="p-2 text-right">Skema Asli</th>
+                            <th className="p-2 text-center">Akumulasi Sisa</th>
+                            <th className="p-2 text-right font-extrabold">Total Tagihan</th>
+                            <th className="p-2 text-right">Terbayar</th>
+                            <th className="p-2 text-center">Status</th>
+                            <th className="p-2 text-center">Aksi</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {detailSchedule.map((j) => {
-                            const isPaidMonth = paidAngsuranKeSet.has(j.bulanKe);
+                          {dynamicDetailSchedule.map((j) => {
+                            const isPaid = j.status === 'Lunas';
+                            const isPartial = j.status === 'Sebagian';
+
                             return (
-                              <tr key={j.bulanKe} className={isPaidMonth ? 'bg-emerald-50/40' : 'hover:bg-[#f8fafc]'}>
-                                <td className="p-1.5 text-center font-bold">{j.bulanKe}</td>
-                                <td className="p-1.5 text-right text-slate-600">{formatRupiah(j.sisaAwal)}</td>
-                                <td className="p-1.5 text-right font-semibold">{formatRupiah(j.pokok)}</td>
-                                <td className="p-1.5 text-right text-[#2563eb] font-semibold">{formatRupiah(j.bunga)}</td>
-                                <td className="p-1.5 text-right font-extrabold text-[#0f172a]">{formatRupiah(j.totalAngsuran)}</td>
-                                <td className="p-1.5 text-center">
-                                  {isPaidMonth ? (
+                              <tr
+                                key={j.bulanKe}
+                                className={`transition-colors ${
+                                  isPaid
+                                    ? 'bg-emerald-50/40 hover:bg-emerald-50/70'
+                                    : isPartial
+                                    ? 'bg-amber-50/40 hover:bg-amber-50/70'
+                                    : 'hover:bg-[#f8fafc]'
+                                }`}
+                              >
+                                <td className="p-2 text-center font-bold">{j.bulanKe}</td>
+                                <td className="p-2 text-right text-slate-600">{formatRupiah(j.pokok)}</td>
+                                <td className="p-2 text-right text-[#2563eb]">{formatRupiah(j.bunga)}</td>
+                                <td className="p-2 text-right font-semibold text-slate-700">{formatRupiah(j.skemaAsli)}</td>
+                                <td className="p-2 text-center whitespace-nowrap">
+                                  {j.akumulasiSebelumnya > 0 ? (
+                                    <span className="px-1.5 py-0.5 rounded-md font-bold text-[9px] bg-rose-50 text-rose-600 border border-rose-200">
+                                      +{formatRupiah(j.akumulasiSebelumnya)}
+                                    </span>
+                                  ) : j.akumulasiSebelumnya < 0 ? (
+                                    <span className="px-1.5 py-0.5 rounded-md font-bold text-[9px] bg-emerald-50 text-emerald-600 border border-emerald-200">
+                                      -{formatRupiah(Math.abs(j.akumulasiSebelumnya))}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400">-</span>
+                                  )}
+                                </td>
+                                <td className="p-2 text-right font-black text-[#0f172a] whitespace-nowrap">
+                                  {formatRupiah(j.totalTagihan)}
+                                </td>
+                                <td className="p-2 text-right font-bold text-[#2563eb] whitespace-nowrap">
+                                  {j.totalDibayar > 0 ? formatRupiah(j.totalDibayar) : '-'}
+                                </td>
+                                <td className="p-2 text-center whitespace-nowrap">
+                                  {isPaid ? (
                                     <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-100 text-emerald-700">
                                       ✓ Lunas
+                                    </span>
+                                  ) : isPartial ? (
+                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-800">
+                                      Sebagian (-{formatRupiah(j.sisaKurang)})
                                     </span>
                                   ) : (
                                     <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-100 text-slate-500">
                                       Belum
                                     </span>
+                                  )}
+                                </td>
+                                <td className="p-2 text-center whitespace-nowrap">
+                                  {!isPaid && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setDetailModalOpen(false);
+                                        handleOpenBayarModal(selectedPinjamanDetail, j.bulanKe);
+                                      }}
+                                      className="px-2.5 py-1 text-[10px] font-extrabold bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-lg transition-all shadow-2xs cursor-pointer"
+                                      title={`Bayar Angsuran Bulan ${j.bulanKe}`}
+                                    >
+                                      Bayar
+                                    </button>
                                   )}
                                 </td>
                               </tr>
