@@ -42,6 +42,10 @@ export default function SimpananPage() {
   const [selectedKuitansi, setSelectedKuitansi] = useState(null);
   const [toastMessage, setToastMessage] = useState('');
 
+  const selectedModalMember = (anggotaList || []).find(
+    (a) => (a.nomor_anggota || a.id) === formData.nomor_anggota
+  );
+
   const loadData = () => {
     const s = dataService.getSimpananSummary();
     const list = dataService.getSimpananList();
@@ -78,11 +82,12 @@ export default function SimpananPage() {
     setTimeout(() => setToastMessage(''), 3500);
   };
 
-  const handleOpenModal = () => {
+  const handleOpenModal = (nomorAnggota = '', defaultTipe = 'Setoran') => {
+    const selectedNomor = nomorAnggota || (anggotaList.length > 0 ? (anggotaList[0].nomor_anggota || anggotaList[0].id) : '');
     setFormData({
-      nomor_anggota: anggotaList.length > 0 ? (anggotaList[0].nomor_anggota || anggotaList[0].id) : '',
+      nomor_anggota: selectedNomor,
       jenis: 'Sukarela',
-      tipe: 'Setoran',
+      tipe: defaultTipe,
       jumlah: '',
       metode: 'Tunai',
       keterangan: ''
@@ -141,6 +146,21 @@ export default function SimpananPage() {
   // Grouping list per Anggota
   const groupedMembers = (() => {
     const map = new Map();
+
+    // Inisialisasi dari anggotaList agar anggota terdaftar tetap ada di daftar
+    (anggotaList || []).forEach((a) => {
+      const no = a.nomor_anggota || a.id;
+      if (!no) return;
+      map.set(no, {
+        nomor_anggota: no,
+        nama_anggota: a.nama || a.nama_lengkap || '-',
+        pokok: 0,
+        wajib: 0,
+        sukarela: 0,
+        total: 0,
+        transactions: []
+      });
+    });
 
     (simpananList || []).forEach((item) => {
       if (!item) return;
@@ -230,7 +250,7 @@ export default function SimpananPage() {
           </button>
           <button
             type="button"
-            onClick={handleOpenModal}
+            onClick={() => handleOpenModal()}
             className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-5 py-2 rounded-full text-xs font-extrabold flex items-center gap-2 transition-all shadow-sm cursor-pointer"
           >
             <span className="material-symbols-outlined text-[18px]">add_circle</span>
@@ -356,7 +376,7 @@ export default function SimpananPage() {
               <tr className="bg-[#f8fafc] border-b border-slate-100 text-slate-400 uppercase font-bold tracking-wider">
                 <th className="px-4 py-3.5 w-12 text-center">#</th>
                 <th className="px-4 py-3.5">No. Anggota</th>
-                <th className="px-4 py-3.5">Nama Anggota</th>
+                <th className="px-4 py-3.5 min-w-[300px] lg:min-w-[340px]">Nama Anggota</th>
                 <th className="px-4 py-3.5 text-right">Simp. Pokok</th>
                 <th className="px-4 py-3.5 text-right">Simp. Wajib</th>
                 <th className="px-4 py-3.5 text-right">Simp. Sukarela</th>
@@ -397,8 +417,24 @@ export default function SimpananPage() {
                         <td className="px-4 py-3.5 font-mono font-bold text-[#2563eb] whitespace-nowrap">
                           {group.nomor_anggota}
                         </td>
-                        <td className="px-4 py-3.5 font-extrabold text-[#0f172a] whitespace-nowrap">
-                          {group.nama_anggota}
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="font-extrabold text-[#0f172a] whitespace-nowrap">
+                              {group.nama_anggota}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenModal(group.nomor_anggota);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-[#2563eb] bg-[#eff6ff] hover:bg-[#2563eb] hover:text-white border border-[#2563eb]/20 hover:border-[#2563eb] rounded-xl transition-all shadow-2xs whitespace-nowrap cursor-pointer active:scale-95 shrink-0 group-hover:bg-[#dbeafe] group-hover:border-[#2563eb]/40"
+                              title={`Catat Setoran / Penarikan untuk ${group.nama_anggota}`}
+                            >
+                              <span className="material-symbols-outlined text-[15px]">add_circle</span>
+                              <span>Catat Setoran / Penarikan</span>
+                            </button>
+                          </div>
                         </td>
                         <td className="px-4 py-3.5 text-right font-semibold text-slate-700 whitespace-nowrap">
                           {formatRupiah(group.pokok)}
@@ -430,16 +466,30 @@ export default function SimpananPage() {
                         <tr>
                           <td colSpan={8} className="p-0 border-b border-slate-100 bg-[#f8fafc]">
                             <div className="p-4 sm:px-8 sm:py-4">
-                              <div className="flex items-center justify-between mb-2">
+                              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                                 <span className="font-extrabold text-slate-700 text-xs flex items-center gap-1.5">
                                   <span className="material-symbols-outlined text-sm text-[#2563eb]">
                                     receipt_long
                                   </span>
                                   Mutasi Rekening: {group.nama_anggota} ({group.nomor_anggota})
                                 </span>
-                                <span className="text-[11px] text-slate-400 font-medium">
-                                  Total Saldo Terkumpul: <strong className="text-[#2563eb]">{formatRupiah(group.total)}</strong>
-                                </span>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-[11px] text-slate-500 font-medium">
+                                    Total Saldo: <strong className="text-[#2563eb] font-extrabold">{formatRupiah(group.total)}</strong>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenModal(group.nomor_anggota);
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-xl text-[11px] font-extrabold transition-all shadow-2xs cursor-pointer active:scale-95"
+                                    title={`Catat Transaksi Baru untuk ${group.nama_anggota}`}
+                                  >
+                                    <span className="material-symbols-outlined text-[15px]">add_circle</span>
+                                    + Catat Setoran / Penarikan
+                                  </button>
+                                </div>
                               </div>
 
                               <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-xs">
@@ -557,7 +607,14 @@ export default function SimpananPage() {
             <div className="p-6 bg-gradient-to-r from-[#1d4ed8] to-[#2563eb] text-white flex justify-between items-center shrink-0">
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-xl text-[#ffd159]">payments</span>
-                <h3 className="text-base font-extrabold">Catat Transaksi Simpanan</h3>
+                <div>
+                  <h3 className="text-base font-extrabold">Catat Transaksi Simpanan</h3>
+                  {selectedModalMember && (
+                    <p className="text-[11px] text-blue-100 font-medium mt-0.5">
+                      Anggota: <span className="font-bold text-white underline underline-offset-2">{selectedModalMember.nomor_anggota || selectedModalMember.id} - {selectedModalMember.nama || selectedModalMember.nama_lengkap}</span>
+                    </p>
+                  )}
+                </div>
               </div>
               <button
                 type="button"
