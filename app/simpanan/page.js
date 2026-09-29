@@ -42,6 +42,13 @@ export default function SimpananPage() {
   const [selectedKuitansi, setSelectedKuitansi] = useState(null);
   const [toastMessage, setToastMessage] = useState('');
 
+  // Modal: Hapus Data Simpanan
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteMemberNo, setDeleteMemberNo] = useState('');
+  const [deleteMode, setDeleteMode] = useState('specific'); // 'specific' | 'category'
+  const [selectedTrxIds, setSelectedTrxIds] = useState(new Set());
+  const [deleteCategory, setDeleteCategory] = useState('pokok'); // 'pokok' | 'wajib' | 'sukarela' | 'all'
+
   const selectedModalMember = (anggotaList || []).find(
     (a) => (a.nomor_anggota || a.id) === formData.nomor_anggota
   );
@@ -117,6 +124,75 @@ export default function SimpananPage() {
 
     setModalOpen(false);
     showToast(`Transaksi Simpanan ${formData.jenis} sebesar ${formatRupiah(formData.jumlah)} berhasil dicatat!`);
+  };
+
+  // Delete Action Handlers
+  const handleOpenDeleteModal = (nomorAnggota = '', specificTrxId = null) => {
+    const selectedNomor = nomorAnggota || (anggotaList.length > 0 ? (anggotaList[0].nomor_anggota || anggotaList[0].id) : '');
+    setDeleteMemberNo(selectedNomor);
+    if (specificTrxId) {
+      setDeleteMode('specific');
+      setSelectedTrxIds(new Set([specificTrxId]));
+    } else {
+      setDeleteMode('specific');
+      setSelectedTrxIds(new Set());
+      setDeleteCategory('pokok');
+    }
+    setDeleteModalOpen(true);
+  };
+
+  const handleToggleSelectTrx = (trxId) => {
+    setSelectedTrxIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(trxId)) next.delete(trxId);
+      else next.add(trxId);
+      return next;
+    });
+  };
+
+  const handleToggleSelectAllTrx = (memberTransactions) => {
+    if (selectedTrxIds.size === memberTransactions.length) {
+      setSelectedTrxIds(new Set());
+    } else {
+      setSelectedTrxIds(new Set(memberTransactions.map((t) => t.id)));
+    }
+  };
+
+  const selectedDeleteMember = (anggotaList || []).find(
+    (a) => (a.nomor_anggota || a.id) === deleteMemberNo
+  );
+
+  const deleteMemberTransactions = (simpananList || []).filter(
+    (s) => (s.nomor_anggota || '') === deleteMemberNo
+  );
+
+  const deletePokokTrx = deleteMemberTransactions.filter((t) => (t.jenis || '').toLowerCase().includes('pokok'));
+  const deleteWajibTrx = deleteMemberTransactions.filter((t) => (t.jenis || '').toLowerCase().includes('wajib'));
+  const deleteSukarelaTrx = deleteMemberTransactions.filter((t) => (t.jenis || '').toLowerCase().includes('sukarela'));
+
+  const targetTrxToDelete = (() => {
+    if (deleteMode === 'specific') {
+      return deleteMemberTransactions.filter((t) => selectedTrxIds.has(t.id));
+    }
+    if (deleteCategory === 'pokok') return deletePokokTrx;
+    if (deleteCategory === 'wajib') return deleteWajibTrx;
+    if (deleteCategory === 'sukarela') return deleteSukarelaTrx;
+    return deleteMemberTransactions; // 'all'
+  })();
+
+  const totalNominalToDelete = targetTrxToDelete.reduce((sum, t) => sum + Number(t.jumlah || 0), 0);
+
+  const handleExecuteDelete = async () => {
+    if (targetTrxToDelete.length === 0) {
+      alert('Pilih data simpanan yang ingin dihapus terlebih dahulu.');
+      return;
+    }
+
+    const ids = targetTrxToDelete.map((t) => t.id);
+    await dataService.deleteMultipleSimpanan(ids);
+    loadData();
+    setDeleteModalOpen(false);
+    showToast(`${targetTrxToDelete.length} data simpanan berhasil dihapus.`);
   };
 
   // State Accordion Collapse/Expand per Anggota (Set berisi nomor_anggota yang dibuka)
@@ -247,6 +323,14 @@ export default function SimpananPage() {
           >
             <span className="material-symbols-outlined text-[18px]">description</span>
             Ekspor Excel
+          </button>
+          <button
+            type="button"
+            onClick={() => handleOpenDeleteModal()}
+            className="px-4 py-2 border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-full text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[18px]">delete_sweep</span>
+            Hapus Data
           </button>
           <button
             type="button"
@@ -465,6 +549,18 @@ export default function SimpananPage() {
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
+                                      handleOpenDeleteModal(group.nomor_anggota);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-[11px] font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
+                                    title={`Hapus Data Simpanan ${group.nama_anggota}`}
+                                  >
+                                    <span className="material-symbols-outlined text-[15px]">delete_sweep</span>
+                                    <span>Hapus Data</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                       handleOpenModal(group.nomor_anggota);
                                     }}
                                     className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-xl text-[11px] font-extrabold transition-all shadow-2xs cursor-pointer active:scale-95"
@@ -487,7 +583,7 @@ export default function SimpananPage() {
                                       <th className="px-4 py-2.5">Metode</th>
                                       <th className="px-4 py-2.5">Keterangan</th>
                                       <th className="px-4 py-2.5 text-right">Nominal</th>
-                                      <th className="px-4 py-2.5 text-center">Kuitansi</th>
+                                      <th className="px-4 py-2.5 text-center">Aksi</th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-slate-100">
@@ -544,17 +640,30 @@ export default function SimpananPage() {
                                               </span>
                                             </td>
                                             <td className="px-4 py-2.5 text-center whitespace-nowrap">
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  handlePrintKuitansi(trx);
-                                                }}
-                                                className="px-2.5 py-1 text-[11px] font-bold text-[#2563eb] bg-blue-50 hover:bg-[#2563eb] hover:text-white rounded-lg transition-all cursor-pointer shadow-2xs"
-                                                title="Cetak Kuitansi Resmi"
-                                              >
-                                                Kuitansi
-                                              </button>
+                                              <div className="flex items-center justify-center gap-1.5">
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handlePrintKuitansi(trx);
+                                                  }}
+                                                  className="px-2.5 py-1 text-[11px] font-bold text-[#2563eb] bg-blue-50 hover:bg-[#2563eb] hover:text-white rounded-lg transition-all cursor-pointer shadow-2xs"
+                                                  title="Cetak Kuitansi Resmi"
+                                                >
+                                                  Kuitansi
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleOpenDeleteModal(group.nomor_anggota, trx.id);
+                                                  }}
+                                                  className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
+                                                  title={`Hapus Transaksi ${trx.id}`}
+                                                >
+                                                  <span className="material-symbols-outlined text-[17px]">delete</span>
+                                                </button>
+                                              </div>
                                             </td>
                                           </tr>
                                         );
@@ -813,6 +922,286 @@ export default function SimpananPage() {
               >
                 <span className="material-symbols-outlined text-base">picture_as_pdf</span>
                 Ekspor PDF Kuitansi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL HAPUS DATA SIMPANAN */}
+      {deleteModalOpen && (
+        <div className="fixed inset-0 z-[100] bg-slate-950/40 flex items-center justify-center p-4 sm:p-6 md:pl-64 lg:pl-68 overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-[28px] sm:rounded-[32px] max-w-xl w-full max-h-[90vh] my-auto shadow-2xl border border-slate-100 overflow-hidden flex flex-col animate-pop-in">
+            {/* Modal Header */}
+            <div className="p-6 bg-gradient-to-r from-rose-700 to-rose-600 text-white flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center text-rose-100 shadow-inner">
+                  <span className="material-symbols-outlined text-2xl">delete_sweep</span>
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white">Hapus Data Simpanan</h3>
+                  <p className="text-[11px] text-rose-100 font-medium mt-0.5">
+                    Pilih data transaksi simpanan yang ingin dihapus dari sistem
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeleteModalOpen(false)}
+                className="text-white/80 hover:text-white p-1 rounded-xl hover:bg-white/10 transition-colors"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto flex flex-col gap-4 text-xs flex-1">
+              {/* 1. Pilih Anggota */}
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Pilih Anggota</label>
+                <select
+                  value={deleteMemberNo || ''}
+                  onChange={(e) => {
+                    setDeleteMemberNo(e.target.value);
+                    setSelectedTrxIds(new Set());
+                  }}
+                  className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200 rounded-2xl focus:border-rose-500 focus:bg-white outline-none font-semibold text-slate-800 transition-all text-xs"
+                >
+                  <option value="">-- Pilih Anggota --</option>
+                  {anggotaList.map((a) => {
+                    const no = a.nomor_anggota || a.id;
+                    return (
+                      <option key={no} value={no}>
+                        {no} - {a.nama || a.nama_lengkap}
+                      </option>
+                    );
+                  })}
+                </select>
+                {selectedDeleteMember && (
+                  <p className="text-[11px] text-slate-500 font-medium mt-1">
+                    Anggota terpilih: <strong className="text-slate-800">{selectedDeleteMember.nama || selectedDeleteMember.nama_lengkap}</strong> ({selectedDeleteMember.nomor_anggota || selectedDeleteMember.id})
+                  </p>
+                )}
+              </div>
+
+              {/* 2. Pilihan Metode Pemilihan: Transaksi Spesifik vs Per Kategori */}
+              <div>
+                <label className="font-bold text-slate-700 block mb-1.5">Metode Pemilihan Data yang Dihapus</label>
+                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-2xl">
+                  <button
+                    type="button"
+                    onClick={() => setDeleteMode('specific')}
+                    className={`py-2 px-3 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                      deleteMode === 'specific'
+                        ? 'bg-white text-rose-600 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Pilih Transaksi Tertentu
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteMode('category')}
+                    className={`py-2 px-3 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                      deleteMode === 'category'
+                        ? 'bg-white text-rose-600 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Hapus Per Kategori
+                  </button>
+                </div>
+              </div>
+
+              {/* 3A. Mode Transaksi Tertentu */}
+              {deleteMode === 'specific' && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-slate-700 text-xs">
+                      Daftar Riwayat Transaksi ({deleteMemberTransactions.length})
+                    </label>
+                    {deleteMemberTransactions.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSelectAllTrx(deleteMemberTransactions)}
+                        className="text-[11px] font-bold text-rose-600 hover:underline cursor-pointer"
+                      >
+                        {selectedTrxIds.size === deleteMemberTransactions.length
+                          ? 'Batal Pilih Semua'
+                          : 'Pilih Semua'}
+                      </button>
+                    )}
+                  </div>
+
+                  {deleteMemberTransactions.length === 0 ? (
+                    <div className="p-6 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center text-slate-400">
+                      Tidak ada data transaksi simpanan untuk anggota ini.
+                    </div>
+                  ) : (
+                    <div className="max-h-60 overflow-y-auto space-y-2 pr-1 divide-y divide-slate-100">
+                      {deleteMemberTransactions.map((trx) => {
+                        const isChecked = selectedTrxIds.has(trx.id);
+                        const isWithdrawal =
+                          trx.tipe === 'Penarikan' || (trx.keterangan || '').toLowerCase().includes('tarik');
+
+                        return (
+                          <label
+                            key={trx.id}
+                            className={`flex items-start gap-3 p-3 rounded-2xl border transition-all cursor-pointer ${
+                              isChecked
+                                ? 'border-rose-400 bg-rose-50/70 shadow-2xs'
+                                : 'border-slate-200 bg-white hover:bg-slate-50/80'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => handleToggleSelectTrx(trx.id)}
+                              className="mt-1 w-4 h-4 text-rose-600 rounded border-slate-300 focus:ring-rose-500 cursor-pointer"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-mono font-bold text-slate-800 text-[11px]">{trx.id}</span>
+                                  <span className="text-slate-400 text-[10px]">•</span>
+                                  <span className="text-slate-500 text-[11px]">{trx.tanggal}</span>
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded-full font-bold text-[9px] uppercase ${
+                                      (trx.jenis || '').toLowerCase().includes('pokok')
+                                        ? 'bg-[#eff6ff] text-[#2563eb]'
+                                        : (trx.jenis || '').toLowerCase().includes('wajib')
+                                        ? 'bg-[#e0e7ff] text-[#4338ca]'
+                                        : 'bg-[#fef8e7] text-[#b88000]'
+                                    }`}
+                                  >
+                                    {trx.jenis}
+                                  </span>
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded-md font-bold text-[9px] ${
+                                      isWithdrawal ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'
+                                    }`}
+                                  >
+                                    {trx.tipe || (isWithdrawal ? 'Penarikan' : 'Setoran')}
+                                  </span>
+                                </div>
+                                <span className="font-extrabold text-xs whitespace-nowrap text-slate-800">
+                                  {isWithdrawal ? '-' : '+'}{formatRupiah(trx.jumlah)}
+                                </span>
+                              </div>
+                              {trx.keterangan && (
+                                <p className="text-[11px] text-slate-500 truncate mt-1">{trx.keterangan}</p>
+                              )}
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 3B. Mode Hapus Per Kategori */}
+              {deleteMode === 'category' && (
+                <div className="flex flex-col gap-2">
+                  <label className="font-bold text-slate-700 text-xs">Pilih Kategori Simpanan yang Dihapus</label>
+                  <div className="space-y-2">
+                    {[
+                      {
+                        id: 'pokok',
+                        label: 'Simpanan Pokok',
+                        desc: 'Hapus seluruh catatan simpanan pokok anggota ini',
+                        list: deletePokokTrx
+                      },
+                      {
+                        id: 'wajib',
+                        label: 'Simpanan Wajib',
+                        desc: 'Hapus seluruh catatan iuran bulanan simpanan wajib',
+                        list: deleteWajibTrx
+                      },
+                      {
+                        id: 'sukarela',
+                        label: 'Simpanan Sukarela',
+                        desc: 'Hapus seluruh mutasi setoran / penarikan simpanan sukarela',
+                        list: deleteSukarelaTrx
+                      },
+                      {
+                        id: 'all',
+                        label: 'Seluruh Riwayat Simpanan',
+                        desc: 'Hapus semua transaksi simpanan anggota ini (reset saldo ke Rp 0)',
+                        list: deleteMemberTransactions
+                      }
+                    ].map((cat) => {
+                      const totalNom = cat.list.reduce((sum, item) => sum + Number(item.jumlah || 0), 0);
+                      const isSelected = deleteCategory === cat.id;
+
+                      return (
+                        <label
+                          key={cat.id}
+                          className={`flex items-start gap-3 p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                            isSelected
+                              ? 'border-rose-400 bg-rose-50/70 shadow-2xs'
+                              : 'border-slate-200 bg-white hover:bg-slate-50'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="deleteCategoryOption"
+                            value={cat.id}
+                            checked={isSelected}
+                            onChange={(e) => setDeleteCategory(e.target.value)}
+                            className="mt-1 w-4 h-4 text-rose-600 border-slate-300 focus:ring-rose-500 cursor-pointer"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <span className="font-extrabold text-xs text-slate-800">{cat.label}</span>
+                              <span className="text-[11px] font-bold text-slate-600">
+                                {cat.list.length} Transaksi
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-0.5">{cat.desc}</p>
+                            <p className="text-[11px] font-extrabold text-rose-600 mt-1">
+                              Total Akumulasi: {formatRupiah(totalNom)}
+                            </p>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 4. Ringkasan & Konfirmasi Keamanan */}
+              <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-900">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="material-symbols-outlined text-base text-rose-600">warning</span>
+                  <span className="font-extrabold text-xs">Konfirmasi Dampak Penghapusan</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-rose-800">
+                  Sebanyak <strong className="underline">{targetTrxToDelete.length} transaksi</strong> dengan total nominal <strong className="underline">{formatRupiah(totalNominalToDelete)}</strong> akan dihapus permanen.
+                </p>
+                <p className="text-[10px] text-rose-700/80 mt-1">
+                  * Catatan kas yang terhubung dengan transaksi simpanan ini juga akan otomatis dibersihkan dari buku kas.
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-[#f8fafc] border-t border-slate-100 flex justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setDeleteModalOpen(false)}
+                className="px-4 py-2 border border-slate-200 rounded-full font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={targetTrxToDelete.length === 0}
+                onClick={handleExecuteDelete}
+                className="px-6 py-2 bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-full font-extrabold shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-base">delete_forever</span>
+                Hapus {targetTrxToDelete.length} Data Terpilih
               </button>
             </div>
           </div>
