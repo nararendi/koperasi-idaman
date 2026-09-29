@@ -6,6 +6,7 @@ import RupiahInput from '../../components/RupiahInput';
 import { dataService } from '../../lib/dataService';
 import { excelExport } from '../../lib/excelExport';
 import { pdfExport } from '../../lib/pdfExport';
+import { formatRupiah, formatNominal } from '../../lib/formatters';
 
 export default function UsahaPage() {
   const [activeTab, setActiveTab] = useState('sembako'); // 'sembako' | 'qurban' | 'rekap'
@@ -89,7 +90,6 @@ export default function UsahaPage() {
     return () => window.removeEventListener('koperasi_db_updated', handleUpdate);
   }, []);
 
-  const formatRupiah = (num) => `Rp ${(Number(num) || 0).toLocaleString('id-ID')}`;
 
   // ==================== SEMBAKO HANDLERS ====================
   const handleOpenTambahProduk = () => {
@@ -180,7 +180,7 @@ export default function UsahaPage() {
     e.preventDefault();
     if (cart.length === 0) return alert('Keranjang belanja masih kosong!');
     const bayarNominal = Number(kasirForm.bayar) || 0;
-    if (bayarNominal < cartTotal) return alert(`Uang pembayaran kurang Rp ${(cartTotal - bayarNominal).toLocaleString('id-ID')}`);
+    if (bayarNominal < cartTotal) return alert(`Uang pembayaran kurang ${formatRupiah(cartTotal - bayarNominal)}`);
 
     let namaPembeliFinal = kasirForm.namaPembeli;
     let nomorAnggotaFinal = '-';
@@ -456,7 +456,7 @@ export default function UsahaPage() {
                         <td className="py-3 px-3 text-right text-slate-500">{formatRupiah(p.harga_beli)}</td>
                         <td className="py-3 px-3 text-right font-bold text-[#2563eb]">{formatRupiah(p.harga_jual)}</td>
                         <td className="py-3 px-3 text-center">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${p.stok <= 5 ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-emerald-50 text-emerald-600'}`}>
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${p.stok <= 5 ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-emerald-50 text-emerald-600'}`}>\
                             {p.stok} {p.satuan}
                           </span>
                         </td>
