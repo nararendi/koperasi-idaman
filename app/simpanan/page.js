@@ -417,24 +417,8 @@ export default function SimpananPage() {
                         <td className="px-4 py-3.5 font-mono font-bold text-[#2563eb] whitespace-nowrap">
                           {group.nomor_anggota}
                         </td>
-                        <td className="px-4 py-3.5">
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="font-extrabold text-[#0f172a] whitespace-nowrap">
-                              {group.nama_anggota}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenModal(group.nomor_anggota);
-                              }}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-[#2563eb] bg-[#eff6ff] hover:bg-[#2563eb] hover:text-white border border-[#2563eb]/20 hover:border-[#2563eb] rounded-xl transition-all shadow-2xs whitespace-nowrap cursor-pointer active:scale-95 shrink-0 group-hover:bg-[#dbeafe] group-hover:border-[#2563eb]/40"
-                              title={`Catat Setoran / Penarikan untuk ${group.nama_anggota}`}
-                            >
-                              <span className="material-symbols-outlined text-[15px]">add_circle</span>
-                              <span>Catat Setoran / Penarikan</span>
-                            </button>
-                          </div>
+                        <td className="px-4 py-3.5 font-extrabold text-[#0f172a] whitespace-nowrap">
+                          {group.nama_anggota}
                         </td>
                         <td className="px-4 py-3.5 text-right font-semibold text-slate-700 whitespace-nowrap">
                           {formatRupiah(group.pokok)}
@@ -483,11 +467,11 @@ export default function SimpananPage() {
                                       e.stopPropagation();
                                       handleOpenModal(group.nomor_anggota);
                                     }}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-xl text-[11px] font-extrabold transition-all shadow-2xs cursor-pointer active:scale-95"
-                                    title={`Catat Transaksi Baru untuk ${group.nama_anggota}`}
+                                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-xl text-[11px] font-extrabold transition-all shadow-2xs cursor-pointer active:scale-95"
+                                    title={`Catat Transaksi untuk ${group.nama_anggota}`}
                                   >
                                     <span className="material-symbols-outlined text-[15px]">add_circle</span>
-                                    + Catat Setoran / Penarikan
+                                    <span>Transaksi</span>
                                   </button>
                                 </div>
                               </div>
@@ -638,7 +622,7 @@ export default function SimpananPage() {
                         formData.tipe === 'Setoran'
                           ? 'bg-[#2563eb] text-white border-[#2563eb] shadow-xs'
                           : 'bg-white text-slate-600 border-slate-200 hover:bg-[#f8fafc]'
-                      }`}
+                      }`}\
                     >
                       + Setoran Masuk
                     </button>
