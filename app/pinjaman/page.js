@@ -120,7 +120,7 @@ export default function PinjamanPage() {
 
     const newLoan = dataService.applyPinjaman(applyForm);
     setApplyModalOpen(false);
-    showToast(`Pengajuan pinjaman baru (${newLoan.nomor_pinjaman}) senilai Rp ${Number(newLoan.jumlah).toLocaleString('id-ID')} berhasil diajukan!`);
+    showToast(`Pengajuan pinjaman baru (${newLoan.nomor_pinjaman}) senilai ${formatRupiah(newLoan.jumlah)} berhasil diajukan!`);
   };
 
   // Change Loan Status (Approve / Reject / Disburse)
@@ -802,8 +802,8 @@ export default function PinjamanPage() {
                       min="1"
                       max={selectedPinjamanBayar.tenor || 12}
                       required
-                      value={bayarForm.angsuran_ke}
-                      onChange={(e) => setBayarForm({ ...bayarForm, angsuran_ke: e.target.value })}
+                      value={bayarForm.cicilanKe}
+                      onChange={(e) => handleCicilanChange(e.target.value)}
                       className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200 rounded-2xl focus:border-[#2563eb] focus:bg-white outline-none font-bold text-[#0f172a]"
                     />
                   </div>
@@ -826,8 +826,8 @@ export default function PinjamanPage() {
                   <label className="font-bold text-slate-700 block mb-1">Jumlah Bayar (Rp) *</label>
                   <RupiahInput
                     required
-                    value={bayarForm.jumlah}
-                    onChange={(val) => setBayarForm({ ...bayarForm, jumlah: val })}
+                    value={bayarForm.jumlahBayar}
+                    onChange={(val) => setBayarForm({ ...bayarForm, jumlahBayar: val })}
                     className="font-black text-[#2563eb] bg-[#f8fafc] rounded-2xl text-sm"
                   />
                   <span className="text-[10px] text-slate-400 mt-1 block">
@@ -836,12 +836,12 @@ export default function PinjamanPage() {
                 </div>
 
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Catatan / Keterangan</label>
+                  <label className="font-bold text-slate-700 block mb-1">Penerima Kasir</label>
                   <input
                     type="text"
-                    value={bayarForm.keterangan}
-                    onChange={(e) => setBayarForm({ ...bayarForm, keterangan: e.target.value })}
-                    placeholder="Contoh: Pembayaran Angsuran ke-2 via Kasir"
+                    value={bayarForm.penerima}
+                    onChange={(e) => setBayarForm({ ...bayarForm, penerima: e.target.value })}
+                    placeholder="Contoh: Admin Kasir"
                     className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200 rounded-2xl focus:border-[#2563eb] focus:bg-white outline-none font-semibold text-slate-800 transition-all"
                   />
                 </div>
