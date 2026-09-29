@@ -79,7 +79,7 @@ export default function KasPage() {
 
     dataService.addKasTransaction(formData);
     setModalOpen(false);
-    showToast(`Transaksi ${formData.jenis} sebesar Rp ${Number(formData.jumlah).toLocaleString('id-ID')} berhasil dicatat.`);
+    showToast(`Transaksi ${formData.jenis} sebesar ${formatRupiah(formData.jumlah)} berhasil dicatat.`);
   };
 
   const filteredKas = (kasList || []).filter((item) => {
