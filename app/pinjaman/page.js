@@ -852,7 +852,7 @@ export default function PinjamanPage() {
                   {/* Pilihan Cicilan Ke- & Metode */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="font-bold text-slate-700 block mb-1">Pilih Angsouran Ke- *</label>
+                      <label className="font-bold text-slate-700 block mb-1">Pilih Angsuran Ke- *</label>
                       <select
                         value={bayarForm.cicilanKe}
                         onChange={(e) => handleCicilanChange(e.target.value)}
@@ -916,7 +916,8 @@ export default function PinjamanPage() {
                       </div>
                     )}
 
-                    {totalDibayarSebelumnya > 0 && (\n                      <div className="flex justify-between items-center text-blue-700 font-semibold bg-blue-50 px-2.5 py-1 rounded-xl">
+                    {totalDibayarSebelumnya > 0 && (
+                      <div className="flex justify-between items-center text-blue-700 font-semibold bg-blue-50 px-2.5 py-1 rounded-xl">
                         <span>Sudah Disetor Sebelumnya:</span>
                         <span>-{formatRupiah(totalDibayarSebelumnya)}</span>
                       </div>
