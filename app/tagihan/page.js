@@ -13,6 +13,7 @@ import Link from 'next/link';
 export default function TagihanPage() {
   const [tagihanData, setTagihanData] = useState({ list: [], totals: {} });
   const [settings, setSettings] = useState({});
+  const [kategoriFilter, setKategoriFilter] = useState('internal'); // 'internal' | 'luar' | 'all'
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
@@ -53,20 +54,29 @@ export default function TagihanPage() {
     return () => window.removeEventListener('koperasi_db_updated', handleUpdate);
   }, []);
 
-
-  const filteredList = (tagihanData?.list || []).filter((row) => {
+  // Filter berdasarkan kategori (Internal Lembaga vs Luar Lembaga vs Semua)
+  const activeCategoryList = (tagihanData?.list || []).filter((row) => {
     if (!row) return false;
+    if (kategoriFilter === 'internal') return !row.is_luar_lembaga;
+    if (kategoriFilter === 'luar') return row.is_luar_lembaga;
+    return true;
+  });
+
+  const filteredList = activeCategoryList.filter((row) => {
     const q = searchQuery.toLowerCase();
     return (
       (row?.nama || '').toLowerCase().includes(q) ||
       (row?.nomor_anggota || '').toLowerCase().includes(q)
     );
-  });
+  }).map((row, idx) => ({
+    ...row,
+    displayNo: idx + 1
+  }));
 
-  // Reset page to 1 on search change
+  // Reset page to 1 on search or category filter change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery]);
+  }, [searchQuery, kategoriFilter]);
 
   const paginatedList = filteredList.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
@@ -133,15 +143,31 @@ export default function TagihanPage() {
     loadData();
   };
 
+  const activeTotals = filteredList.reduce((acc, row) => {
+    acc.wajib += Number(row?.wajib || 0);
+    acc.sukarela += Number(row?.sukarela || 0);
+    acc.qurban += Number(row?.qurban || 0);
+    acc.pokok += Number(row?.pokok || 0);
+    acc.jasa += Number(row?.jasa || 0);
+    acc.sembako += Number(row?.sembako || 0);
+    acc.total += Number(row?.jumlah || 0);
+    return acc;
+  }, { wajib: 0, sukarela: 0, qurban: 0, pokok: 0, jasa: 0, sembako: 0, total: 0 });
+
+  const categoryLabel = kategoriFilter === 'internal'
+    ? 'Internal (Lembaga)'
+    : kategoriFilter === 'luar'
+      ? 'Luar Lembaga'
+      : 'Semua Anggota';
+
   const handleExportPDF = () => {
-    pdfExport.exportDaftarTagihanPDF(tagihanData, settings, getPeriodeLabel());
+    pdfExport.exportDaftarTagihanPDF(tagihanData, settings, getPeriodeLabel(), kategoriFilter);
   };
 
   const handleExportExcel = () => {
-    excelExport.exportDaftarTagihanExcel(tagihanData, settings, getPeriodeLabel());
+    excelExport.exportDaftarTagihanExcel(tagihanData, settings, getPeriodeLabel(), kategoriFilter);
   };
 
-  const totals = tagihanData.totals || {};
   const today = new Date();
   const todayFormatted = today.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
   const dateLine = `Bandung, ${todayFormatted}`;
@@ -156,17 +182,19 @@ export default function TagihanPage() {
             type="button"
             onClick={handleExportExcel}
             className="px-4 py-2 border border-[#2563eb]/30 bg-[#eff6ff] hover:bg-[#dbeafe] text-[#2563eb] rounded-full text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+            title={`Ekspor Excel Tagihan (${categoryLabel})`}
           >
             <span className="material-symbols-outlined text-[18px]">description</span>
-            Ekspor Excel
+            Ekspor Excel ({categoryLabel})
           </button>
           <button
             type="button"
             onClick={handleExportPDF}
             className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-5 py-2 rounded-full text-xs font-extrabold flex items-center gap-2 transition-all shadow-sm shadow-[#2563eb]/20 cursor-pointer"
+            title={`Cetak / Ekspor PDF Tagihan (${categoryLabel})`}
           >
             <span className="material-symbols-outlined text-[18px]">picture_as_pdf</span>
-            Cetak / Ekspor PDF
+            Cetak / Ekspor PDF ({categoryLabel})
           </button>
         </div>
       }
@@ -178,8 +206,10 @@ export default function TagihanPage() {
             <span className="material-symbols-outlined text-2xl">request_quote</span>
           </div>
           <div>
-            <span className="text-[10px] font-bold text-slate-400 block uppercase">Total Seluruh Tagihan</span>
-            <span className="text-lg font-black text-rose-600">{formatRupiah(totals.total)}</span>
+            <span className="text-[10px] font-bold text-slate-400 block uppercase">
+              Tagihan {categoryLabel}
+            </span>
+            <span className="text-lg font-black text-rose-600">{formatRupiah(activeTotals.total)}</span>
           </div>
         </div>
 
@@ -188,8 +218,10 @@ export default function TagihanPage() {
             <span className="material-symbols-outlined text-2xl">savings</span>
           </div>
           <div>
-            <span className="text-[10px] font-bold text-slate-400 block uppercase">Total Simpanan & Qurban</span>
-            <span className="text-lg font-black text-[#0f172a]">{formatRupiah((totals.wajib || 0) + (totals.sukarela || 0) + (totals.qurban || 0))}</span>
+            <span className="text-[10px] font-bold text-slate-400 block uppercase">
+              Simpanan & Qurban ({categoryLabel})
+            </span>
+            <span className="text-lg font-black text-[#0f172a]">{formatRupiah((activeTotals.wajib || 0) + (activeTotals.sukarela || 0) + (activeTotals.qurban || 0))}</span>
           </div>
         </div>
 
@@ -198,8 +230,10 @@ export default function TagihanPage() {
             <span className="material-symbols-outlined text-2xl">payments</span>
           </div>
           <div>
-            <span className="text-[10px] font-bold text-slate-400 block uppercase">Total Potongan Pinjaman</span>
-            <span className="text-lg font-black text-[#0f172a]">{formatRupiah((totals.pokok || 0) + (totals.jasa || 0))}</span>
+            <span className="text-[10px] font-bold text-slate-400 block uppercase">
+              Potongan Pinjaman ({categoryLabel})
+            </span>
+            <span className="text-lg font-black text-[#0f172a]">{formatRupiah((activeTotals.pokok || 0) + (activeTotals.jasa || 0))}</span>
           </div>
         </div>
 
@@ -208,8 +242,10 @@ export default function TagihanPage() {
             <span className="material-symbols-outlined text-2xl">shopping_cart</span>
           </div>
           <div>
-            <span className="text-[10px] font-bold text-slate-400 block uppercase">Total Tagihan Sembako</span>
-            <span className="text-lg font-black text-[#0f172a]">{formatRupiah(totals.sembako)}</span>
+            <span className="text-[10px] font-bold text-slate-400 block uppercase">
+              Tagihan Sembako ({categoryLabel})
+            </span>
+            <span className="text-lg font-black text-[#0f172a]">{formatRupiah(activeTotals.sembako)}</span>
           </div>
         </div>
       </div>
@@ -217,13 +253,83 @@ export default function TagihanPage() {
       {/* Main Container Card */}
       <div className="bg-white rounded-3xl border border-slate-100 shadow-xs p-6 flex flex-col gap-6">
         {/* Document Header */}
-        <div className="text-center pb-4 border-b border-slate-100">
+        <div className="text-center pb-4 border-b border-slate-100 flex flex-col items-center gap-1.5">
           <h2 className="text-base sm:text-lg font-black text-[#0f172a] tracking-wide uppercase">
             DAFTAR TAGIHAN {(settings.namaKoperasi || 'KOPERASI GURU KARYAWAN SMK ASSALAAM BANDUNG').toUpperCase()}
           </h2>
-          <h3 className="text-xs sm:text-sm font-extrabold text-[#2563eb] uppercase mt-0.5">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 bg-blue-50/90 border border-blue-200/80 rounded-full text-xs font-black text-[#1d4ed8] uppercase tracking-wide">
+            <span className="material-symbols-outlined text-sm">
+              {kategoriFilter === 'internal' ? 'apartment' : kategoriFilter === 'luar' ? 'public' : 'badge'}
+            </span>
+            <span>
+              {kategoriFilter === 'internal' && 'DAFTAR TAGIHAN ANGGOTA INTERNAL (LEMBAGA)'}
+              {kategoriFilter === 'luar' && 'DAFTAR TAGIHAN ANGGOTA LUAR LEMBAGA (NAMA HURUF BESAR)'}
+              {kategoriFilter === 'all' && 'DAFTAR TAGIHAN SEMUA ANGGOTA (INTERNAL & LUAR LEMBAGA)'}
+            </span>
+          </div>
+          <h3 className="text-xs sm:text-sm font-extrabold text-slate-500 uppercase">
             BULAN {getPeriodeLabel().toUpperCase()}
           </h3>
+        </div>
+
+        {/* Category Selection Tabs & Filters */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          {/* Segmented Control Tabs */}
+          <div className="flex items-center p-1 bg-slate-100 rounded-2xl border border-slate-200 gap-1 overflow-x-auto">
+            <button
+              type="button"
+              onClick={() => setKategoriFilter('internal')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                kategoriFilter === 'internal'
+                  ? 'bg-white text-[#2563eb] shadow-xs font-extrabold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span className="material-symbols-outlined text-base">apartment</span>
+              <span>Anggota Internal (Lembaga)</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                kategoriFilter === 'internal' ? 'bg-blue-100 text-[#2563eb]' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {tagihanData?.counts?.internal ?? (tagihanData?.list || []).filter(r => !r.is_luar_lembaga).length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setKategoriFilter('luar')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                kategoriFilter === 'luar'
+                  ? 'bg-white text-indigo-600 shadow-xs font-extrabold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span className="material-symbols-outlined text-base">public</span>
+              <span>Anggota Luar Lembaga</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                kategoriFilter === 'luar' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {tagihanData?.counts?.luarLembaga ?? (tagihanData?.list || []).filter(r => r.is_luar_lembaga).length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setKategoriFilter('all')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                kategoriFilter === 'all'
+                  ? 'bg-white text-slate-900 shadow-xs font-extrabold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span className="material-symbols-outlined text-base">list_alt</span>
+              <span>Semua</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                kategoriFilter === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {tagihanData?.counts?.total ?? (tagihanData?.list || []).length}
+              </span>
+            </button>
+          </div>
         </div>
 
         {/* Search & Actions Bar */}
@@ -304,9 +410,9 @@ export default function TagihanPage() {
                     <td colSpan={12} className="text-center py-12 text-slate-400 bg-slate-50/50">
                       <div className="flex flex-col items-center justify-center gap-2">
                         <span className="material-symbols-outlined text-4xl text-slate-300">receipt_long</span>
-                        <p className="font-semibold text-slate-600">Belum ada data tagihan anggota.</p>
+                        <p className="font-semibold text-slate-600">Belum ada data tagihan anggota untuk kategori ini.</p>
                         <p className="text-[11px] text-slate-400 max-w-sm">
-                          Klik tombol &quot;Isi Contoh Data Tagihan&quot; di atas untuk memasukkan data contoh sesuai format laporan, atau tambahkan anggota baru.
+                          Pilih tab kategori lainnya atau gunakan pencarian untuk menemukan anggota.
                         </p>
                       </div>
                     </td>
@@ -314,13 +420,22 @@ export default function TagihanPage() {
                 ) : (
                   paginatedList.map((row, idx) => (
                     <tr key={row.nomor_anggota} className={`${idx % 2 === 1 ? 'bg-[#fcfdfe]' : 'bg-white'} hover:bg-[#eff6ff]/70 transition-colors`}>
-                      <td className="border border-slate-300 py-3 px-2 text-center font-semibold text-slate-500">{row.no}</td>
+                      <td className="border border-slate-300 py-3 px-2 text-center font-semibold text-slate-500">{row.displayNo}</td>
                       <td className="border border-slate-300 py-3 px-2 text-center">
                         <span className="font-mono font-bold text-xs text-[#0f172a] bg-slate-100 px-2 py-0.5 rounded-md">
                           {row.nomor_anggota}
                         </span>
                       </td>
-                      <td className="border border-slate-300 py-3 px-3 font-bold text-[#0f172a]">{row.nama}</td>
+                      <td className="border border-slate-300 py-3 px-3 font-bold text-[#0f172a]">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span>{row.nama}</span>
+                          {row.is_luar_lembaga && (
+                            <span className="px-1.5 py-0.5 text-[9px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded">
+                              LUAR LEMBAGA
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="border border-slate-300 py-3 px-3 text-right font-medium text-slate-700">{row.wajib > 0 ? formatRupiah(row.wajib) : '-'}</td>
                       <td className="border border-slate-300 py-3 px-3 text-right font-medium text-slate-700">{row.sukarela > 0 ? formatRupiah(row.sukarela) : '-'}</td>
                       <td className="border border-slate-300 py-3 px-3 text-right font-medium text-slate-700">{row.qurban > 0 ? formatRupiah(row.qurban) : '-'}</td>
@@ -348,18 +463,18 @@ export default function TagihanPage() {
                 )}
                 {/* Row Total JUMLAH */}
                 <tr className="bg-[#f1f5f9] font-black text-slate-900 text-xs border-t-2 border-slate-400">
-                  <td colSpan={3} className="border border-slate-300 py-3.5 px-4 text-center font-black tracking-wider text-[12px] bg-slate-200/90">
-                    JUMLAH
+                  <td colSpan={3} className="border border-slate-300 py-3.5 px-4 text-center font-black tracking-wider text-[11px] bg-slate-200/90 uppercase">
+                    JUMLAH TAGIHAN ({categoryLabel})
                   </td>
-                  <td className="border border-slate-300 py-3.5 px-3 text-right font-extrabold">{formatRupiah(totals.wajib)}</td>
-                  <td className="border border-slate-300 py-3.5 px-3 text-right font-extrabold">{formatRupiah(totals.sukarela)}</td>
-                  <td className="border border-slate-300 py-3.5 px-3 text-right font-extrabold">{formatRupiah(totals.qurban)}</td>
+                  <td className="border border-slate-300 py-3.5 px-3 text-right font-extrabold">{formatRupiah(activeTotals.wajib)}</td>
+                  <td className="border border-slate-300 py-3.5 px-3 text-right font-extrabold">{formatRupiah(activeTotals.sukarela)}</td>
+                  <td className="border border-slate-300 py-3.5 px-3 text-right font-extrabold">{formatRupiah(activeTotals.qurban)}</td>
                   <td className="border border-slate-300 py-3.5 px-2 text-center"></td>
-                  <td className="border border-slate-300 py-3.5 px-3 text-right font-extrabold">{formatRupiah(totals.pokok)}</td>
-                  <td className="border border-slate-300 py-3.5 px-3 text-right font-extrabold">{formatRupiah(totals.jasa)}</td>
-                  <td className="border border-slate-300 py-3.5 px-3 text-right font-extrabold">{formatRupiah(totals.sembako)}</td>
+                  <td className="border border-slate-300 py-3.5 px-3 text-right font-extrabold">{formatRupiah(activeTotals.pokok)}</td>
+                  <td className="border border-slate-300 py-3.5 px-3 text-right font-extrabold">{formatRupiah(activeTotals.jasa)}</td>
+                  <td className="border border-slate-300 py-3.5 px-3 text-right font-extrabold">{formatRupiah(activeTotals.sembako)}</td>
                   <td className="border border-slate-300 py-3.5 px-3 text-right font-black text-rose-600 bg-rose-100/80 text-sm">
-                    {formatRupiah(totals.total)}
+                    {formatRupiah(activeTotals.total)}
                   </td>
                   <td className="border border-slate-300 py-3.5 px-2"></td>
                 </tr>
