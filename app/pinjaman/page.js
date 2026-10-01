@@ -732,40 +732,44 @@ export default function PinjamanPage() {
                     <button
                       type="button"
                       onClick={() => setShowSchedulePreview(!showSchedulePreview)}
-                      className="text-[11px] text-[#2563eb] hover:text-[#1d4ed8] font-extrabold flex items-center gap-1 cursor-pointer"
+                      className="text-[11px] text-[#2563eb] hover:text-[#1d4ed8] font-extrabold flex items-center gap-1.5 cursor-pointer select-none outline-none focus:outline-none focus:ring-0 py-0.5"
                     >
-                      <span className="material-symbols-outlined text-sm">
+                      <span className="material-symbols-outlined text-sm select-none pointer-events-none">
                         {showSchedulePreview ? 'expand_less' : 'expand_more'}
                       </span>
-                      {showSchedulePreview ? 'Sembunyikan Rincian Jadwal' : `Lihat Jadwal Angsuran Menurun Lengkap (${liveSim.tenor} Bulan)`}
+                      <span className="select-none pointer-events-none">
+                        {showSchedulePreview ? 'Sembunyikan Rincian Jadwal' : `Lihat Jadwal Angsuran Menurun Lengkap (${liveSim.tenor} Bulan)`}
+                      </span>
                     </button>
 
                     {showSchedulePreview && (
-                      <div className="mt-2 max-h-48 overflow-y-auto border border-slate-200 rounded-2xl bg-white shadow-xs">
-                        <table className="w-full text-left border-collapse text-[10px]">
-                          <thead>
-                            <tr className="bg-[#2563eb] text-white font-bold">
-                              <th className="p-2 text-center">Bln</th>
-                              <th className="p-2 text-right">Sisa Pokok Awal</th>
-                              <th className="p-2 text-right">Pokok</th>
-                              <th className="p-2 text-right">Bunga ({applyForm.bunga}%)</th>
-                              <th className="p-2 text-right">Total Tagihan</th>
-                              <th className="p-2 text-right">Sisa Pokok Akhir</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100">
-                            {liveSim.jadwal.map((j) => (
-                              <tr key={j.bulanKe} className="hover:bg-[#f8fafc]">
-                                <td className="p-2 text-center font-bold">{j.bulanKe}</td>
-                                <td className="p-2 text-right text-slate-600">{formatRupiah(j.sisaAwal)}</td>
-                                <td className="p-2 text-right font-semibold">{formatRupiah(j.pokok)}</td>
-                                <td className="p-2 text-right text-[#2563eb] font-semibold">{formatRupiah(j.bunga)}</td>
-                                <td className="p-2 text-right font-extrabold text-[#0f172a]">{formatRupiah(j.totalAngsuran)}</td>
-                                <td className="p-2 text-right text-slate-500">{formatRupiah(j.sisaAkhir)}</td>
+                      <div className="mt-2 border border-slate-200 rounded-2xl bg-white shadow-xs overflow-hidden">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse text-[9.5px]">
+                            <thead>
+                              <tr className="bg-[#2563eb] text-white font-bold">
+                                <th className="px-2.5 py-1.5 text-center">Bln</th>
+                                <th className="px-2.5 py-1.5 text-right">Sisa Pokok Awal</th>
+                                <th className="px-2.5 py-1.5 text-right">Pokok</th>
+                                <th className="px-2.5 py-1.5 text-right">Bunga ({applyForm.bunga}%)</th>
+                                <th className="px-2.5 py-1.5 text-right">Total Tagihan</th>
+                                <th className="px-2.5 py-1.5 text-right">Sisa Pokok Akhir</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {liveSim.jadwal.map((j) => (
+                                <tr key={j.bulanKe} className="hover:bg-[#f8fafc] transition-colors odd:bg-slate-50/40">
+                                  <td className="px-2.5 py-1 text-center font-bold text-slate-700">{j.bulanKe}</td>
+                                  <td className="px-2.5 py-1 text-right text-slate-600">{formatRupiah(j.sisaAwal)}</td>
+                                  <td className="px-2.5 py-1 text-right font-semibold text-slate-700">{formatRupiah(j.pokok)}</td>
+                                  <td className="px-2.5 py-1 text-right text-[#2563eb] font-semibold">{formatRupiah(j.bunga)}</td>
+                                  <td className="px-2.5 py-1 text-right font-extrabold text-[#0f172a]">{formatRupiah(j.totalAngsuran)}</td>
+                                  <td className="px-2.5 py-1 text-right text-slate-500">{formatRupiah(j.sisaAkhir)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1194,95 +1198,97 @@ export default function PinjamanPage() {
                       </h4>
                       <span className="text-[10px] text-slate-400">Sisa kekurangan/kelebihan otomatis dialihkan ke bulan berikutnya</span>
                     </div>
-                    <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-56 overflow-y-auto">
-                      <table className="w-full text-left text-[10px]">
-                        <thead className="bg-[#eff6ff] text-slate-700 font-bold border-b border-slate-100">
-                          <tr>
-                            <th className="p-2 text-center">Bln</th>
-                            <th className="p-2 text-right">Pokok</th>
-                            <th className="p-2 text-right">Bunga</th>
-                            <th className="p-2 text-right">Skema Asli</th>
-                            <th className="p-2 text-center">Akumulasi Sisa</th>
-                            <th className="p-2 text-right font-extrabold">Total Tagihan</th>
-                            <th className="p-2 text-right">Terbayar</th>
-                            <th className="p-2 text-center">Status</th>
-                            <th className="p-2 text-center">Aksi</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {dynamicDetailSchedule.map((j) => {
-                            const isPaid = j.status === 'Lunas';
-                            const isPartial = j.status === 'Sebagian';
+                    <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-[9.5px]">
+                          <thead className="bg-[#eff6ff] text-slate-700 font-bold border-b border-slate-100">
+                            <tr>
+                              <th className="px-2.5 py-1.5 text-center">Bln</th>
+                              <th className="px-2.5 py-1.5 text-right">Pokok</th>
+                              <th className="px-2.5 py-1.5 text-right">Bunga</th>
+                              <th className="px-2.5 py-1.5 text-right">Skema Asli</th>
+                              <th className="px-2.5 py-1.5 text-center">Akumulasi Sisa</th>
+                              <th className="px-2.5 py-1.5 text-right font-extrabold">Total Tagihan</th>
+                              <th className="px-2.5 py-1.5 text-right">Terbayar</th>
+                              <th className="px-2.5 py-1.5 text-center">Status</th>
+                              <th className="px-2.5 py-1.5 text-center">Aksi</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {dynamicDetailSchedule.map((j) => {
+                              const isPaid = j.status === 'Lunas';
+                              const isPartial = j.status === 'Sebagian';
 
-                            return (
-                              <tr
-                                key={j.bulanKe}
-                                className={`transition-colors ${
-                                  isPaid
-                                    ? 'bg-emerald-50/40 hover:bg-emerald-50/70'
-                                    : isPartial
-                                    ? 'bg-amber-50/40 hover:bg-amber-50/70'
-                                    : 'hover:bg-[#f8fafc]'
-                                }`}
-                              >
-                                <td className="p-2 text-center font-bold">{j.bulanKe}</td>
-                                <td className="p-2 text-right text-slate-600">{formatRupiah(j.pokok)}</td>
-                                <td className="p-2 text-right text-[#2563eb]">{formatRupiah(j.bunga)}</td>
-                                <td className="p-2 text-right font-semibold text-slate-700">{formatRupiah(j.skemaAsli)}</td>
-                                <td className="p-2 text-center whitespace-nowrap">
-                                  {j.akumulasiSebelumnya > 0 ? (
-                                    <span className="px-1.5 py-0.5 rounded-md font-bold text-[9px] bg-rose-50 text-rose-600 border border-rose-200">
-                                      +{formatRupiah(j.akumulasiSebelumnya)}
-                                    </span>
-                                  ) : j.akumulasiSebelumnya < 0 ? (
-                                    <span className="px-1.5 py-0.5 rounded-md font-bold text-[9px] bg-emerald-50 text-emerald-600 border border-emerald-200">
-                                      -{formatRupiah(Math.abs(j.akumulasiSebelumnya))}
-                                    </span>
-                                  ) : (
-                                    <span className="text-slate-400">-</span>
-                                  )}
-                                </td>
-                                <td className="p-2 text-right font-black text-[#0f172a] whitespace-nowrap">
-                                  {formatRupiah(j.totalTagihan)}
-                                </td>
-                                <td className="p-2 text-right font-bold text-[#2563eb] whitespace-nowrap">
-                                  {j.totalDibayar > 0 ? formatRupiah(j.totalDibayar) : '-'}
-                                </td>
-                                <td className="p-2 text-center whitespace-nowrap">
-                                  {isPaid ? (
-                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-100 text-emerald-700">
-                                      ✓ Lunas
-                                    </span>
-                                  ) : isPartial ? (
-                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-800">
-                                      Sebagian (-{formatRupiah(j.sisaKurang)})
-                                    </span>
-                                  ) : (
-                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-100 text-slate-500">
-                                      Belum
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="p-2 text-center whitespace-nowrap">
-                                  {!isPaid && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setDetailModalOpen(false);
-                                        handleOpenBayarModal(selectedPinjamanDetail, j.bulanKe);
-                                      }}
-                                      className="px-2.5 py-1 text-[10px] font-extrabold bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-lg transition-all shadow-2xs cursor-pointer"
-                                      title={`Bayar Angsuran Bulan ${j.bulanKe}`}
-                                    >
-                                      Bayar
-                                    </button>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                              return (
+                                <tr
+                                  key={j.bulanKe}
+                                  className={`transition-colors ${
+                                    isPaid
+                                      ? 'bg-emerald-50/40 hover:bg-emerald-50/70'
+                                      : isPartial
+                                      ? 'bg-amber-50/40 hover:bg-amber-50/70'
+                                      : 'hover:bg-[#f8fafc] odd:bg-slate-50/30'
+                                  }`}
+                                >
+                                  <td className="px-2.5 py-1 text-center font-bold">{j.bulanKe}</td>
+                                  <td className="px-2.5 py-1 text-right text-slate-600">{formatRupiah(j.pokok)}</td>
+                                  <td className="px-2.5 py-1 text-right text-[#2563eb]">{formatRupiah(j.bunga)}</td>
+                                  <td className="px-2.5 py-1 text-right font-semibold text-slate-700">{formatRupiah(j.skemaAsli)}</td>
+                                  <td className="px-2.5 py-1 text-center whitespace-nowrap">
+                                    {j.akumulasiSebelumnya > 0 ? (
+                                      <span className="px-1.5 py-0.5 rounded-md font-bold text-[9px] bg-rose-50 text-rose-600 border border-rose-200">
+                                        +{formatRupiah(j.akumulasiSebelumnya)}
+                                      </span>
+                                    ) : j.akumulasiSebelumnya < 0 ? (
+                                      <span className="px-1.5 py-0.5 rounded-md font-bold text-[9px] bg-emerald-50 text-emerald-600 border border-emerald-200">
+                                        -{formatRupiah(Math.abs(j.akumulasiSebelumnya))}
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-400">-</span>
+                                    )}
+                                  </td>
+                                  <td className="px-2.5 py-1 text-right font-black text-[#0f172a] whitespace-nowrap">
+                                    {formatRupiah(j.totalTagihan)}
+                                  </td>
+                                  <td className="px-2.5 py-1 text-right font-bold text-[#2563eb] whitespace-nowrap">
+                                    {j.totalDibayar > 0 ? formatRupiah(j.totalDibayar) : '-'}
+                                  </td>
+                                  <td className="px-2.5 py-1 text-center whitespace-nowrap">
+                                    {isPaid ? (
+                                      <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-100 text-emerald-700">
+                                        ✓ Lunas
+                                      </span>
+                                    ) : isPartial ? (
+                                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-800">
+                                        Sebagian (-{formatRupiah(j.sisaKurang)})
+                                      </span>
+                                    ) : (
+                                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-100 text-slate-500">
+                                        Belum
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-2.5 py-1 text-center whitespace-nowrap">
+                                    {!isPaid && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setDetailModalOpen(false);
+                                          handleOpenBayarModal(selectedPinjamanDetail, j.bulanKe);
+                                        }}
+                                        className="px-2 py-0.5 text-[9.5px] font-extrabold bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-lg transition-all shadow-2xs cursor-pointer"
+                                        title={`Bayar Angsuran Bulan ${j.bulanKe}`}
+                                      >
+                                        Bayar
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
                 )}
