@@ -52,8 +52,14 @@ export default function UsahaPage() {
     nama: '',
     tipe_hewan: '1 Ekor Kambing / Domba',
     target_nominal: 3500000,
+    targetNominal: 3500000,
+    nominal_bulanan: '',
+    nominalBulanan: '',
     tahun_qurban: '1448 H / 2026'
   });
+
+  const [modalEditNominalQurbanOpen, setModalEditNominalQurbanOpen] = useState(false);
+  const [editNominalQurbanValue, setEditNominalQurbanValue] = useState('');
 
   const [modalSetorQurbanOpen, setModalSetorQurbanOpen] = useState(false);
   const [selectedPesertaQurban, setSelectedPesertaQurban] = useState(null);
@@ -217,6 +223,9 @@ export default function UsahaPage() {
       nama: anggotaList[0]?.nama_lengkap || anggotaList[0]?.nama || '',
       tipe_hewan: '1 Ekor Kambing / Domba',
       target_nominal: 3500000,
+      targetNominal: 3500000,
+      nominal_bulanan: '',
+      nominalBulanan: '',
       tahun_qurban: '1448 H / 2026'
     });
     setModalPesertaQurbanOpen(true);
@@ -240,12 +249,31 @@ export default function UsahaPage() {
     dataService.addQurbanPeserta({
       nama: namaFinal,
       nomor_anggota: noAnggotaFinal,
-      tipe_hewan: pesertaQurbanForm.tipe_hewan,
-      target_nominal: Number(pesertaQurbanForm.target_nominal),
-      tahun_qurban: pesertaQurbanForm.tahun_qurban
+      tipe_hewan: pesertaQurbanForm.tipe_hewan || pesertaQurbanForm.tipeHewan,
+      target_nominal: Number(pesertaQurbanForm.target_nominal || pesertaQurbanForm.targetNominal),
+      nominal_bulanan: Number(pesertaQurbanForm.nominal_bulanan || pesertaQurbanForm.nominalBulanan) || 0,
+      tahun_qurban: pesertaQurbanForm.tahun_qurban || pesertaQurbanForm.periode
     });
 
     setModalPesertaQurbanOpen(false);
+    loadData();
+  };
+
+  const handleOpenEditNominalQurban = (peserta) => {
+    setSelectedPesertaQurban(peserta);
+    setEditNominalQurbanValue(peserta.nominal_bulanan || '');
+    setModalEditNominalQurbanOpen(true);
+  };
+
+  const handleSaveEditNominalQurban = (e) => {
+    e.preventDefault();
+    if (!selectedPesertaQurban) return;
+    const nom = Number(editNominalQurbanValue) || 0;
+    dataService.updateQurbanPesertaNominalBulanan(
+      selectedPesertaQurban.kode_peserta || selectedPesertaQurban.id,
+      nom
+    );
+    setModalEditNominalQurbanOpen(false);
     loadData();
   };
 
@@ -647,6 +675,25 @@ export default function UsahaPage() {
                           <span>Sisa: {formatRupiah(Math.max(0, target - terkumpul))}</span>
                         </div>
                       </div>
+
+                      {/* Tagihan Rutin Bulanan Info */}
+                      {peserta.status !== 'Tersalurkan' && (
+                        <div className="mb-3 p-2.5 bg-blue-50/60 rounded-2xl border border-blue-100 flex items-center justify-between text-[11px]">
+                          <div>
+                            <span className="text-slate-500 font-medium block text-[10px]">Tagihan Rutin / Bulan:</span>
+                            <span className="font-extrabold text-[#2563eb]">
+                              {formatRupiah(peserta.nominal_bulanan || 0)}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditNominalQurban(peserta)}
+                            className="px-2.5 py-1 bg-white hover:bg-blue-100 text-[#2563eb] border border-blue-200 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
+                          >
+                            Ubah
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Card Actions */}
@@ -1237,9 +1284,22 @@ export default function UsahaPage() {
                 <RupiahInput
                   required
                   value={pesertaQurbanForm.targetNominal}
-                  onChange={(val) => setPesertaQurbanForm({ ...pesertaQurbanForm, targetNominal: val })}
+                  onChange={(val) => setPesertaQurbanForm({ ...pesertaQurbanForm, targetNominal: val, target_nominal: val })}
                   placeholder="0"
                   className="!rounded-2xl !bg-[#f8fafc] font-black text-[#2563eb]"
+                />
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="font-bold text-slate-700">Nominal Setoran Rutin / Bulan (Rp)</label>
+                  <span className="text-[10px] text-slate-400">Otomatis masuk tagihan bulanan</span>
+                </div>
+                <RupiahInput
+                  value={pesertaQurbanForm.nominalBulanan}
+                  onChange={(val) => setPesertaQurbanForm({ ...pesertaQurbanForm, nominalBulanan: val, nominal_bulanan: val })}
+                  placeholder="Contoh: 350.000 (Opsional, default target / 10)"
+                  className="!rounded-2xl !bg-[#f8fafc] font-bold text-slate-800"
                 />
               </div>
 
@@ -1488,6 +1548,70 @@ export default function UsahaPage() {
                 Cetak Dokumen
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* ========================================================================= */}
+      {/* MODAL: UBAH NOMINAL TAGIHAN BULANAN QURBAN */}
+      {/* ========================================================================= */}
+      {modalEditNominalQurbanOpen && selectedPesertaQurban && (
+        <div className="fixed inset-0 z-[100] bg-slate-950/40 flex items-center justify-center p-4 sm:p-6 md:pl-64 lg:pl-68 overflow-y-auto animate-fade-in">
+          <div className="bg-white w-full max-w-md max-h-[88vh] my-auto rounded-[28px] sm:rounded-[32px] shadow-2xl border border-slate-100 overflow-hidden flex flex-col animate-pop-in">
+            <div className="p-5 bg-[#f8fafc] border-b border-slate-100 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[#2563eb]">edit_calendar</span>
+                <h3 className="font-extrabold text-sm text-[#0f172a]">Atur Tagihan Rutin Bulanan Qurban</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalEditNominalQurbanOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditNominalQurban} className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
+              <div className="p-3.5 bg-[#eff6ff] rounded-2xl border border-[#bfdbfe]">
+                <span className="text-[10px] text-slate-500 font-bold block">Peserta Qurban:</span>
+                <h4 className="text-sm font-extrabold text-[#0f172a]">{selectedPesertaQurban?.nama || 'Peserta'}</h4>
+                <p className="text-[11px] text-slate-600">{selectedPesertaQurban?.nomor_anggota && selectedPesertaQurban?.nomor_anggota !== '-' ? `No. Anggota: ${selectedPesertaQurban.nomor_anggota} • ` : ''}{selectedPesertaQurban?.tipe_hewan || '-'}</p>
+                <div className="flex justify-between text-[11px] mt-2 pt-2 border-t border-blue-200/50">
+                  <span>Terkumpul: <strong>{formatRupiah(selectedPesertaQurban?.total_terkumpul || 0)}</strong></span>
+                  <span>Sisa Target: <strong>{formatRupiah(selectedPesertaQurban?.sisa_target ?? Math.max(0, (selectedPesertaQurban?.target_nominal || 0) - (selectedPesertaQurban?.total_terkumpul || 0)))}</strong></span>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Nominal Tagihan Per Bulan (Rp) *</label>
+                <RupiahInput
+                  required
+                  value={editNominalQurbanValue}
+                  onChange={(val) => setEditNominalQurbanValue(val)}
+                  placeholder="0"
+                  className="!rounded-2xl !bg-[#f8fafc] font-black text-[#2563eb]"
+                />
+                <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                  Nominal ini akan otomatis masuk ke <strong>Daftar Tagihan</strong> setiap bulan selama tabungan qurban peserta belum mencapai target.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setModalEditNominalQurbanOpen(false)}
+                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-2xl font-bold transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-2xl font-extrabold transition-all shadow-md shadow-[#2563eb]/20 cursor-pointer"
+                >
+                  Simpan Perubahan
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
