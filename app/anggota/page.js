@@ -14,6 +14,7 @@ export default function DaftarAnggotaPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [settings, setSettings] = useState({});
   const [currentPage, setCurrentPage] = useState(1);
+  const [sortOrder, setSortOrder] = useState('asc'); // 'asc' | 'desc'
   const ITEMS_PER_PAGE = 10;
 
   // Modal States
@@ -101,19 +102,26 @@ export default function DaftarAnggotaPage() {
     }
   };
 
-  const filteredAnggota = (anggotaList || []).filter((item) => {
-    if (!item) return false;
-    const nama = (item?.nama || item?.nama_lengkap || '').toLowerCase();
-    const id = (item?.nomor_anggota || item?.id || '').toLowerCase();
-    const alamat = (item?.alamat || item?.alamat_lengkap || '').toLowerCase();
-    const query = searchQuery.toLowerCase();
+  const filteredAnggota = (anggotaList || [])
+    .filter((item) => {
+      if (!item) return false;
+      const nama = (item?.nama || item?.nama_lengkap || '').toLowerCase();
+      const id = (item?.nomor_anggota || item?.id || '').toLowerCase();
+      const alamat = (item?.alamat || item?.alamat_lengkap || '').toLowerCase();
+      const query = searchQuery.toLowerCase();
 
-    const matchesSearch = nama.includes(query) || id.includes(query) || alamat.includes(query);
-    const itemStatus = (item?.status || item?.status_keanggotaan || 'aktif').toLowerCase();
-    const matchesStatus = statusFilter === 'all' || itemStatus === statusFilter.toLowerCase();
+      const matchesSearch = nama.includes(query) || id.includes(query) || alamat.includes(query);
+      const itemStatus = (item?.status || item?.status_keanggotaan || 'aktif').toLowerCase();
+      const matchesStatus = statusFilter === 'all' || itemStatus === statusFilter.toLowerCase();
 
-    return matchesSearch && matchesStatus;
-  });
+      return matchesSearch && matchesStatus;
+    })
+    .sort((a, b) => {
+      const noA = String(a?.nomor_anggota || a?.id || '');
+      const noB = String(b?.nomor_anggota || b?.id || '');
+      const cmp = noA.localeCompare(noB, undefined, { numeric: true, sensitivity: 'base' });
+      return sortOrder === 'asc' ? cmp : -cmp;
+    });
 
   // Reset page to 1 if search/filter reduces total pages
   useEffect(() => {
@@ -258,7 +266,18 @@ export default function DaftarAnggotaPage() {
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-[#f8fafc] border-b border-slate-100 text-slate-400 uppercase font-bold tracking-wider">
-                <th className="px-4 py-3.5">No. Anggota</th>
+                <th
+                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                  className="px-4 py-3.5 cursor-pointer hover:text-[#2563eb] select-none transition-colors"
+                  title="Klik untuk membalik urutan (Naik / Turun)"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>No. Anggota</span>
+                    <span className="material-symbols-outlined text-[15px] text-[#2563eb]">
+                      {sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                    </span>
+                  </div>
+                </th>
                 <th className="px-4 py-3.5">Nama Anggota</th>
                 <th className="px-4 py-3.5">No. HP / WA</th>
                 <th className="px-4 py-3.5">Alamat</th>
