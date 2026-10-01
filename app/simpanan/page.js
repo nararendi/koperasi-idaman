@@ -34,8 +34,14 @@ export default function SimpananPage() {
     tipe: 'Setoran',
     jumlah: '',
     metode: 'Tunai',
-    keterangan: ''
+    keterangan: '',
+    updateNominalRutin: true
   });
+
+  // Modal: Ubah Nominal Sukarela Bulanan
+  const [editNominalModalOpen, setEditNominalModalOpen] = useState(false);
+  const [selectedNominalMember, setSelectedNominalMember] = useState(null);
+  const [nominalSukarelaValue, setNominalSukarelaValue] = useState('');
 
   // Modal: Bukti Kuitansi
   const [kuitansiModalOpen, setKuitansiModalOpen] = useState(false);
@@ -97,9 +103,32 @@ export default function SimpananPage() {
       tipe: defaultTipe,
       jumlah: '',
       metode: 'Tunai',
-      keterangan: ''
+      keterangan: '',
+      updateNominalRutin: true
     });
     setModalOpen(true);
+  };
+
+  const handleOpenEditNominal = (group = null) => {
+    if (group) {
+      setSelectedNominalMember(group);
+      setNominalSukarelaValue(group.nominalSukarela || 0);
+    } else {
+      const defaultGroup = groupedMembers[0] || null;
+      setSelectedNominalMember(defaultGroup);
+      setNominalSukarelaValue(defaultGroup?.nominalSukarela || 0);
+    }
+    setEditNominalModalOpen(true);
+  };
+
+  const handleSaveNominalSukarela = async (e) => {
+    e.preventDefault();
+    if (!selectedNominalMember) return;
+    const no = selectedNominalMember.nomor_anggota || selectedNominalMember.id;
+    await dataService.updateAnggotaNominalSukarela(no, nominalSukarelaValue);
+    setEditNominalModalOpen(false);
+    loadData();
+    showToast(`Nominal Simpanan Sukarela bulanan untuk ${selectedNominalMember.nama_anggota} berhasil diperbarui menjadi ${formatRupiah(nominalSukarelaValue)}.`);
   };
 
   const handleSubmitTransaction = (e) => {
@@ -119,7 +148,8 @@ export default function SimpananPage() {
       tipe: formData.tipe,
       jumlah: formData.jumlah,
       metode: formData.metode,
-      keterangan: formData.keterangan || `${formData.tipe} Simpanan ${formData.jenis}`
+      keterangan: formData.keterangan || `${formData.tipe} Simpanan ${formData.jenis}`,
+      updateNominalRutin: formData.updateNominalRutin !== false
     });
 
     setModalOpen(false);
@@ -227,6 +257,12 @@ export default function SimpananPage() {
     (anggotaList || []).forEach((a) => {
       const no = a.nomor_anggota || a.id;
       if (!no) return;
+      const nominalSukarela = (a.nominal_sukarela !== undefined && a.nominal_sukarela !== null && a.nominal_sukarela !== '')
+        ? Number(a.nominal_sukarela)
+        : (a.simpanan_sukarela !== undefined && a.simpanan_sukarela !== null && a.simpanan_sukarela !== ''
+          ? Number(a.simpanan_sukarela)
+          : (Number(settings.simpananSukarela) || Number(settings.simpananWajib) || 25000));
+
       map.set(no, {
         nomor_anggota: no,
         nama_anggota: a.nama || a.nama_lengkap || '-',
@@ -234,6 +270,7 @@ export default function SimpananPage() {
         wajib: 0,
         sukarela: 0,
         total: 0,
+        nominalSukarela,
         transactions: []
       });
     });
@@ -251,6 +288,7 @@ export default function SimpananPage() {
           wajib: 0,
           sukarela: 0,
           total: 0,
+          nominalSukarela: Number(settings.simpananSukarela) || Number(settings.simpananWajib) || 25000,
           transactions: []
         });
       }
@@ -323,6 +361,15 @@ export default function SimpananPage() {
           >
             <span className="material-symbols-outlined text-[18px]">description</span>
             Ekspor Excel
+          </button>
+          <button
+            type="button"
+            onClick={() => handleOpenEditNominal()}
+            className="px-4 py-2 border border-[#df9800]/40 bg-[#fef8e7] hover:bg-[#faecd2] text-[#9a6700] rounded-full text-xs font-extrabold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+            title="Atur nominal simpanan sukarela bulanan anggota untuk daftar tagihan"
+          >
+            <span className="material-symbols-outlined text-[18px]">edit_calendar</span>
+            Ubah Nominal Sukarela
           </button>
           <button
             type="button"
@@ -545,6 +592,18 @@ export default function SimpananPage() {
                                   <span className="text-[11px] text-slate-500 font-medium">
                                     Total Saldo: <strong className="text-[#2563eb] font-extrabold">{formatRupiah(group.total)}</strong>
                                   </span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenEditNominal(group);
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl text-[11px] font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
+                                    title={`Ubah Nominal Simpanan Sukarela Bulanan untuk ${group.nama_anggota}`}
+                                  >
+                                    <span className="material-symbols-outlined text-[15px] text-amber-600">edit_calendar</span>
+                                    <span>Tagihan Sukarela: <strong className="text-amber-900">{formatRupiah(group.nominalSukarela)}/bln</strong></span>
+                                  </button>
                                   <button
                                     type="button"
                                     onClick={(e) => {
@@ -791,6 +850,19 @@ export default function SimpananPage() {
                     onChange={(val) => setFormData({ ...formData, jumlah: val })}
                     className="focus:border-[#2563eb] font-extrabold text-[#2563eb] text-sm bg-[#f8fafc] rounded-2xl"
                   />
+                  {formData.jenis === 'Sukarela' && formData.tipe === 'Setoran' && (
+                    <label className="flex items-center gap-2 mt-2 cursor-pointer bg-amber-50/70 p-2.5 rounded-xl border border-amber-200">
+                      <input
+                        type="checkbox"
+                        checked={formData.updateNominalRutin !== false}
+                        onChange={(e) => setFormData({ ...formData, updateNominalRutin: e.target.checked })}
+                        className="rounded text-[#2563eb] focus:ring-0 w-4 h-4 cursor-pointer"
+                      />
+                      <span className="text-[11px] text-amber-900 font-semibold leading-tight">
+                        Perbarui nominal tagihan bulanan sukarela tetap anggota ini di Daftar Tagihan menjadi nominal ini
+                      </span>
+                    </label>
+                  )}
                 </div>
 
                 {/* Metode Pembayaran */}
@@ -1204,6 +1276,91 @@ export default function SimpananPage() {
                 Hapus {targetTrxToDelete.length} Data Terpilih
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL UBAH NOMINAL SUKARELA BULANAN */}
+      {editNominalModalOpen && selectedNominalMember && (
+        <div className="fixed inset-0 z-[100] bg-slate-950/40 flex items-center justify-center p-4 sm:p-6 md:pl-64 lg:pl-68 overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-[28px] sm:rounded-[32px] max-w-md w-full my-auto shadow-2xl border border-slate-100 overflow-hidden flex flex-col animate-pop-in">
+            <div className="p-6 bg-gradient-to-r from-amber-600 to-amber-500 text-white flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center text-amber-100 shadow-inner">
+                  <span className="material-symbols-outlined text-2xl">edit_calendar</span>
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white">Ubah Nominal Sukarela Bulanan</h3>
+                  <p className="text-[11px] text-amber-100 font-medium mt-0.5">
+                    Tagihan tetap per bulan pada menu Daftar Tagihan
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditNominalModalOpen(false)}
+                className="text-white/80 hover:text-white p-1 rounded-xl hover:bg-white/10"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveNominalSukarela} className="flex flex-col flex-1">
+              <div className="p-6 flex flex-col gap-4 text-xs">
+                {/* Pilih Anggota */}
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Anggota Koperasi</label>
+                  <select
+                    value={selectedNominalMember.nomor_anggota || selectedNominalMember.id}
+                    onChange={(e) => {
+                      const found = groupedMembers.find((g) => g.nomor_anggota === e.target.value);
+                      if (found) {
+                        setSelectedNominalMember(found);
+                        setNominalSukarelaValue(found.nominalSukarela || 0);
+                      }
+                    }}
+                    className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200 rounded-2xl focus:border-amber-500 focus:bg-white outline-none font-semibold text-slate-800 transition-all"
+                  >
+                    {groupedMembers.map((g) => (
+                      <option key={g.nomor_anggota} value={g.nomor_anggota}>
+                        {g.nomor_anggota} - {g.nama_anggota} (Saat ini: {formatRupiah(g.nominalSukarela)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Nominal Simpanan Sukarela Rutin (Rp / Bulan) *
+                  </label>
+                  <RupiahInput
+                    required
+                    value={nominalSukarelaValue}
+                    onChange={(val) => setNominalSukarelaValue(val)}
+                    className="focus:border-amber-500 font-extrabold text-amber-700 text-sm bg-[#f8fafc] rounded-2xl"
+                  />
+                  <p className="text-[11px] text-slate-500 mt-2 leading-relaxed bg-amber-50/70 p-3 rounded-2xl border border-amber-200/80">
+                    💡 Nominal ini akan otomatis muncul pada tabel <strong>Daftar Tagihan</strong> setiap bulannya untuk anggota ini, sama seperti simpanan wajib.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-4 bg-[#f8fafc] border-t border-slate-100 flex justify-end gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setEditNominalModalOpen(false)}
+                  className="px-4 py-2 border border-slate-200 rounded-full font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full font-extrabold shadow-sm transition-all cursor-pointer"
+                >
+                  Simpan Nominal
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

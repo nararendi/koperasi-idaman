@@ -22,6 +22,7 @@ export default function PengaturanPage() {
     pengawas: '',
     simpananPokok: 500000,
     simpananWajib: 100000,
+    simpananSukarela: 25000,
     sukuBungaPinjaman: 1.5,
     shuPersenAnggota: 40,
     shuPersenModal: 30,
@@ -110,6 +111,7 @@ export default function PengaturanPage() {
       ...formData,
       simpananPokok: Number(formData.simpananPokok),
       simpananWajib: Number(formData.simpananWajib),
+      simpananSukarela: Number(formData.simpananSukarela) || 25000,
       sukuBungaPinjaman: Number(formData.sukuBungaPinjaman),
       shuPersenAnggota: Number(formData.shuPersenAnggota),
       shuPersenModal: Number(formData.shuPersenModal),
@@ -530,6 +532,16 @@ export default function PengaturanPage() {
                     onChange={(val) => setFormData({ ...formData, simpananWajib: val })}
                     className="bg-[#f8fafc] rounded-2xl"
                   />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Tarif Simpanan Sukarela Rutin (Default Rp / Bln)</label>
+                  <RupiahInput
+                    value={formData.simpananSukarela}
+                    onChange={(val) => setFormData({ ...formData, simpananSukarela: val })}
+                    className="bg-[#f8fafc] rounded-2xl"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-1 block">Default tagihan sukarela per bulan bagi anggota (sama seperti wajib)</span>
                 </div>
 
                 <div>
