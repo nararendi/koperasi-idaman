@@ -153,6 +153,7 @@ export default function SimpananPage() {
     });
 
     setModalOpen(false);
+    loadData();
     showToast(`Transaksi Simpanan ${formData.jenis} sebesar ${formatRupiah(formData.jumlah)} berhasil dicatat!`);
   };
 
@@ -257,11 +258,7 @@ export default function SimpananPage() {
     (anggotaList || []).forEach((a) => {
       const no = a.nomor_anggota || a.id;
       if (!no) return;
-      const nominalSukarela = (a.nominal_tagihan_sukarela !== undefined && a.nominal_tagihan_sukarela !== null && a.nominal_tagihan_sukarela !== '')
-        ? Number(a.nominal_tagihan_sukarela)
-        : ((a.nominal_sukarela !== undefined && a.nominal_sukarela !== null && a.nominal_sukarela !== '' && Number(a.nominal_sukarela) <= 500000)
-          ? Number(a.nominal_sukarela)
-          : (Number(settings.simpananSukarela) || Number(settings.simpananWajib) || 25000));
+      const nominalSukarela = dataService.getMemberNominalSukarela(no);
 
       map.set(no, {
         nomor_anggota: no,
@@ -288,7 +285,7 @@ export default function SimpananPage() {
           wajib: 0,
           sukarela: 0,
           total: 0,
-          nominalSukarela: Number(settings.simpananSukarela) || Number(settings.simpananWajib) || 25000,
+          nominalSukarela: dataService.getMemberNominalSukarela(no),
           transactions: []
         });
       }
@@ -882,6 +879,25 @@ export default function SimpananPage() {
                     className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200 rounded-2xl focus:border-[#2563eb] focus:bg-white outline-none font-semibold text-slate-800 transition-all"
                   />
                 </div>
+
+                {/* Sinkronisasi Tagihan Bulanan Sukarela */}
+                {formData.jenis === 'Sukarela' && formData.tipe === 'Setoran' && (
+                  <div className="bg-amber-50/90 border border-amber-200 rounded-2xl p-3.5 flex items-start gap-2.5">
+                    <input
+                      type="checkbox"
+                      id="updateNominalRutinTagihan"
+                      checked={formData.updateNominalRutin !== false}
+                      onChange={(e) => setFormData({ ...formData, updateNominalRutin: e.target.checked })}
+                      className="mt-0.5 w-4 h-4 text-[#2563eb] rounded border-slate-300 focus:ring-blue-500 cursor-pointer shrink-0"
+                    />
+                    <label htmlFor="updateNominalRutinTagihan" className="text-xs text-amber-900 cursor-pointer select-none leading-relaxed">
+                      <strong className="block font-bold">Jadikan nominal ini sebagai Tagihan Bulanan Rutin di Daftar Tagihan</strong>
+                      <span className="block text-[11px] text-amber-700 mt-0.5">
+                        Potongan Simpanan Sukarela pada menu <strong>Daftar Tagihan</strong> untuk anggota ini akan otomatis disesuaikan menjadi {formData.jumlah && Number(formData.jumlah) > 0 ? formatRupiah(formData.jumlah) : 'Rp ...'}/bulan (sama seperti simpanan wajib).
+                      </span>
+                    </label>
+                  </div>
+                )}
               </div>
 
               <div className="p-4 bg-[#f8fafc] border-t border-slate-100 flex justify-end gap-2 shrink-0">
