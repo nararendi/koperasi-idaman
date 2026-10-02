@@ -21,6 +21,14 @@ export default function TagihanPage() {
   // Modal Edit Tagihan Item
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
+  const [activeLoanData, setActiveLoanData] = useState(null);
+  const [cicilanMode, setCicilanMode] = useState('skema'); // 'skema' | 'custom'
+  const [selectedCicilanBulan, setSelectedCicilanBulan] = useState(1);
+  const [tanggalBayar, setTanggalBayar] = useState(new Date().toISOString().split('T')[0]);
+  const [metodeBayar, setMetodeBayar] = useState('Tunai'); // 'Tunai' | 'Transfer Bank' | 'Potong Gaji'
+  const [isProcessingBayar, setIsProcessingBayar] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+
   const [editForm, setEditForm] = useState({
     wajib: '',
     sukarela: '',
@@ -30,6 +38,11 @@ export default function TagihanPage() {
     jasa: '',
     sembako: ''
   });
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(''), 4500);
+  };
 
   const getPeriodeLabel = () => {
     const d = new Date();
@@ -85,16 +98,87 @@ export default function TagihanPage() {
 
   const handleOpenEdit = (row) => {
     setSelectedMember(row);
-    setEditForm({
-      wajib: row.wajib || '',
-      sukarela: row.sukarela || '',
-      qurban: row.qurban || '',
-      cicilanKe: row.cicilanKe || '',
-      pokok: row.pokok || '',
-      jasa: row.jasa || '',
-      sembako: row.sembako || ''
-    });
+
+    // Ambil data pinjaman aktif anggota (jika ada)
+    const loan = dataService.getActivePinjamanForAnggota(row.nomor_anggota);
+    setActiveLoanData(loan);
+
+    // Default tanggal & metode bayar
+    const todayStr = new Date().toISOString().split('T')[0];
+    setTanggalBayar(row.pembayaran_info?.tanggal_bayar || todayStr);
+    setMetodeBayar(row.pembayaran_info?.metode || 'Tunai');
+
+    // Tentukan mode cicilan dan inisialisasi form
+    if (loan && loan.jadwal_lengkap && loan.jadwal_lengkap.length > 0) {
+      // Cari cicilan target (yang sesuai row.cicilanKe atau cicilan yang belum lunas)
+      let targetBulan = Number(row.cicilanKe);
+      if (!targetBulan || targetBulan <= 0) {
+        const nextUnpaid = loan.jadwal_lengkap.find((s) => s.status !== 'Lunas');
+        targetBulan = nextUnpaid ? nextUnpaid.bulanKe : 1;
+      }
+      setSelectedCicilanBulan(targetBulan);
+      setCicilanMode('skema');
+
+      const foundSchedule = loan.jadwal_lengkap.find((s) => s.bulanKe === targetBulan);
+      if (foundSchedule) {
+        const targetPokok = foundSchedule.status === 'Sebagian' ? Math.min(foundSchedule.sisaKurang, foundSchedule.pokok) : foundSchedule.pokok;
+        const targetJasa = foundSchedule.status === 'Sebagian' ? Math.max(0, foundSchedule.sisaKurang - targetPokok) : foundSchedule.bunga;
+
+        setEditForm({
+          wajib: row.wajib !== undefined && row.wajib !== null ? row.wajib : '',
+          sukarela: row.sukarela !== undefined && row.sukarela !== null ? row.sukarela : '',
+          qurban: row.qurban !== undefined && row.qurban !== null ? row.qurban : '',
+          cicilanKe: targetBulan,
+          pokok: row.pokok !== undefined && row.pokok !== null && row.pokok !== '' ? row.pokok : targetPokok,
+          jasa: row.jasa !== undefined && row.jasa !== null && row.jasa !== '' ? row.jasa : targetJasa,
+          sembako: row.sembako !== undefined && row.sembako !== null ? row.sembako : ''
+        });
+      } else {
+        setEditForm({
+          wajib: row.wajib || '',
+          sukarela: row.sukarela || '',
+          qurban: row.qurban || '',
+          cicilanKe: row.cicilanKe || '',
+          pokok: row.pokok || '',
+          jasa: row.jasa || '',
+          sembako: row.sembako || ''
+        });
+      }
+    } else {
+      setCicilanMode('custom');
+      setSelectedCicilanBulan(row.cicilanKe || 1);
+      setEditForm({
+        wajib: row.wajib || '',
+        sukarela: row.sukarela || '',
+        qurban: row.qurban || '',
+        cicilanKe: row.cicilanKe || '',
+        pokok: row.pokok || '',
+        jasa: row.jasa || '',
+        sembako: row.sembako || ''
+      });
+    }
+
     setEditModalOpen(true);
+  };
+
+  const handleSelectSkemaCicilan = (bulanKe) => {
+    const b = Number(bulanKe);
+    setSelectedCicilanBulan(b);
+
+    if (activeLoanData && activeLoanData.jadwal_lengkap) {
+      const schedule = activeLoanData.jadwal_lengkap.find((s) => s.bulanKe === b);
+      if (schedule) {
+        const p = schedule.status === 'Sebagian' ? Math.min(schedule.sisaKurang, schedule.pokok) : schedule.pokok;
+        const j = schedule.status === 'Sebagian' ? Math.max(0, schedule.sisaKurang - p) : schedule.bunga;
+
+        setEditForm((prev) => ({
+          ...prev,
+          cicilanKe: b,
+          pokok: p,
+          jasa: j
+        }));
+      }
+    }
   };
 
   const handleSaveEdit = (e) => {
@@ -113,6 +197,69 @@ export default function TagihanPage() {
 
     setEditModalOpen(false);
     loadData();
+    showToast(`Penyesuaian tagihan untuk ${selectedMember.nama} berhasil disimpan.`);
+  };
+
+  const handleBayarkanSemua = async () => {
+    if (!selectedMember) return;
+
+    const totalBayar =
+      (Number(editForm.wajib) || 0) +
+      (Number(editForm.sukarela) || 0) +
+      (Number(editForm.qurban) || 0) +
+      (Number(editForm.pokok) || 0) +
+      (Number(editForm.jasa) || 0) +
+      (Number(editForm.sembako) || 0);
+
+    if (totalBayar <= 0) {
+      alert('Total tagihan adalah Rp 0. Tidak ada nominal yang dapat dibayarkan.');
+      return;
+    }
+
+    const tglText = tanggalBayar ? tanggalBayar.split('-').reverse().join('/') : 'hari ini';
+    const confirmMsg = `Konfirmasi pembayaran seluruh tagihan untuk ${selectedMember.nama} sebesar ${formatRupiah(totalBayar)} pada tanggal ${tglText}?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      setIsProcessingBayar(true);
+
+      const res = await dataService.bayarSemuaTagihanAnggota({
+        periode: tagihanData.periode || '',
+        nomor_anggota: selectedMember.nomor_anggota,
+        rincian: {
+          wajib: Number(editForm.wajib) || 0,
+          sukarela: Number(editForm.sukarela) || 0,
+          qurban: Number(editForm.qurban) || 0,
+          cicilanKe: editForm.cicilanKe || '',
+          pokok: Number(editForm.pokok) || 0,
+          jasa: Number(editForm.jasa) || 0,
+          sembako: Number(editForm.sembako) || 0
+        },
+        tanggal: tanggalBayar,
+        metode: metodeBayar,
+        penerima: settings.bendahara || 'Bendahara Koperasi'
+      });
+
+      setIsProcessingBayar(false);
+      setEditModalOpen(false);
+      loadData();
+
+      showToast(`🎉 Pembayaran Tagihan ${selectedMember.nama} (${formatRupiah(totalBayar)}) BERHASIL! Simpanan wajib & sukarela bertambah di Simpanan, angsuran tercatat di Pinjaman.`);
+    } catch (err) {
+      setIsProcessingBayar(false);
+      console.error('Gagal membayarkan tagihan:', err);
+      alert('Terjadi kesalahan saat memproses pembayaran tagihan: ' + err.message);
+    }
+  };
+
+  const handleBatalBayar = () => {
+    if (!selectedMember) return;
+    if (!window.confirm(`Yakin ingin membatalkan status lunas tagihan bulan ini untuk ${selectedMember.nama}? Status akan kembali menjadi Belum Bayar.`)) return;
+
+    dataService.batalBayarTagihanAnggota(tagihanData.periode || '', selectedMember.nomor_anggota);
+    setEditModalOpen(false);
+    loadData();
+    showToast(`Status lunas pembayaran tagihan ${selectedMember.nama} telah dibatalkan.`);
   };
 
   // Helper untuk mengisi contoh data anggota SMK Assalaam sesuai screenshot
@@ -347,7 +494,17 @@ export default function TagihanPage() {
             />
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Quick Payment Status Badges */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-xs font-bold">
+              <span className="material-symbols-outlined text-[15px] font-bold text-emerald-600">check_circle</span>
+              <span>Lunas: <span className="font-black text-emerald-700">{tagihanData?.counts?.lunas || 0}</span></span>
+            </div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-full text-xs font-bold">
+              <span className="material-symbols-outlined text-[15px] font-bold text-amber-600">schedule</span>
+              <span>Belum Bayar: <span className="font-black text-amber-700">{tagihanData?.counts?.belumLunas || 0}</span></span>
+            </div>
+
             {tagihanData.list.length === 0 && (
               <button
                 type="button"
@@ -434,6 +591,19 @@ export default function TagihanPage() {
                               LUAR LEMBAGA
                             </span>
                           )}
+                          {row.is_lunas ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-black bg-emerald-50 text-emerald-700 border border-emerald-300 rounded-full shadow-2xs"
+                              title={`Lunas dibayarkan pada ${row.pembayaran_info?.tanggal_bayar ? row.pembayaran_info.tanggal_bayar.split('-').reverse().join('/') : ''} via ${row.pembayaran_info?.metode || 'Tunai'}`}
+                            >
+                              <span className="material-symbols-outlined text-[12px] font-bold text-emerald-600">check_circle</span>
+                              LUNAS
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 rounded-full">
+                              Belum Bayar
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="border border-slate-300 py-3 px-3 text-right font-medium text-slate-700">{row.wajib > 0 ? formatRupiah(row.wajib) : '-'}</td>
@@ -452,10 +622,16 @@ export default function TagihanPage() {
                         <button
                           type="button"
                           onClick={() => handleOpenEdit(row)}
-                          title="Sesuaikan Tagihan Anggota"
-                          className="p-1.5 hover:bg-blue-50 text-[#2563eb] rounded-lg transition-colors cursor-pointer"
+                          title={row.is_lunas ? "Lihat / Sesuaikan Tagihan (Sudah Lunas)" : "Bayar / Sesuaikan Tagihan Anggota"}
+                          className={`p-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center mx-auto ${
+                            row.is_lunas
+                              ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200'
+                              : 'bg-blue-50 hover:bg-blue-100 text-[#2563eb] border border-blue-200'
+                          }`}
                         >
-                          <span className="material-symbols-outlined text-[17px]">edit_note</span>
+                          <span className="material-symbols-outlined text-[17px]">
+                            {row.is_lunas ? 'verified' : 'edit_note'}
+                          </span>
                         </button>
                       </td>
                     </tr>
@@ -514,31 +690,106 @@ export default function TagihanPage() {
       </div>
 
       {/* ========================================================================= */}
-      {/* MODAL: EDIT TAGIHAN ANGGOTA */}
+      {/* MODAL: PENYESUAIAN & PEMBAYARAN TAGIHAN ANGGOTA */}
       {/* ========================================================================= */}
       {editModalOpen && selectedMember && (
-        <div className="fixed inset-0 z-[100] bg-slate-950/40 flex items-center justify-center p-4 sm:p-6 md:pl-64 lg:pl-68 overflow-y-auto animate-fade-in">
-          <div className="bg-white w-full max-w-lg max-h-[88vh] my-auto rounded-[28px] sm:rounded-[32px] shadow-2xl border border-slate-100 overflow-y-auto animate-pop-in">
-            <div className="p-5 bg-[#f8fafc] border-b border-slate-100 flex items-center justify-between">
+        <div className="fixed inset-0 z-[100] bg-slate-950/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 md:pl-64 lg:pl-68 overflow-y-auto animate-fade-in">
+          <div className="bg-white w-full max-w-xl max-h-[90vh] my-auto rounded-[28px] sm:rounded-[32px] shadow-2xl border border-slate-100 overflow-y-auto animate-pop-in flex flex-col">
+            {/* Modal Header */}
+            <div className="p-5 bg-gradient-to-r from-slate-50 to-blue-50/40 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-xs z-10">
               <div>
-                <span className="text-[10px] font-mono font-bold text-slate-400 block">{selectedMember?.nomor_anggota || '-'}</span>
-                <h3 className="font-extrabold text-sm text-[#0f172a]">Penyesuaian Tagihan: {selectedMember?.nama || 'Anggota'}</h3>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded-md">
+                    {selectedMember?.nomor_anggota || '-'}
+                  </span>
+                  {selectedMember?.is_lunas && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full">
+                      <span className="material-symbols-outlined text-xs font-bold">check_circle</span>
+                      TAGIHAN SUDAH LUNAS
+                    </span>
+                  )}
+                </div>
+                <h3 className="font-extrabold text-sm sm:text-base text-[#0f172a]">
+                  Penyesuaian & Pembayaran: {selectedMember?.nama || 'Anggota'}
+                </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setEditModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
 
             <form onSubmit={handleSaveEdit} className="p-5 space-y-4 text-xs">
-              {/* Simpanan */}
+              {/* Alert jika tagihan bulan ini sudah pernah dibayar */}
+              {selectedMember?.is_lunas && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start justify-between gap-3 text-emerald-800 animate-fade-in">
+                  <div className="flex items-start gap-2">
+                    <span className="material-symbols-outlined text-emerald-600 text-lg mt-0.5">verified</span>
+                    <div>
+                      <p className="font-extrabold text-[11px]">
+                        Tagihan bulan ini telah dibayarkan pada {selectedMember.pembayaran_info?.tanggal_bayar ? selectedMember.pembayaran_info.tanggal_bayar.split('-').reverse().join('/') : 'Bulan Berjalan'}
+                      </p>
+                      <p className="text-[10px] text-emerald-700 mt-0.5">
+                        Total Bayar: <span className="font-bold">{formatRupiah(selectedMember.pembayaran_info?.total_bayar || selectedMember.jumlah)}</span> • Metode: <span className="font-bold">{selectedMember.pembayaran_info?.metode || 'Tunai'}</span>
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleBatalBayar}
+                    className="text-[10px] font-bold text-rose-600 hover:text-rose-800 hover:bg-rose-100/60 px-2 py-1 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    Batal Lunas
+                  </button>
+                </div>
+              )}
+
+              {/* Pengaturan Pembayaran (Tanggal & Metode) */}
+              <div className="bg-[#f8fafc] p-3.5 rounded-2xl border border-slate-200 space-y-2">
+                <div className="flex items-center gap-1.5 text-slate-800 font-extrabold text-[11px]">
+                  <span className="material-symbols-outlined text-[#2563eb] text-sm">calendar_month</span>
+                  <span>Detail Pembayaran Tagihan</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">
+                      Tanggal Pembayaran:
+                    </label>
+                    <input
+                      type="date"
+                      value={tanggalBayar}
+                      onChange={(e) => setTanggalBayar(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-800 outline-none focus:border-[#2563eb]"
+                    />
+                    <span className="text-[10px] text-slate-400 block mt-0.5">
+                      Tanggal ini tercatat di Simpanan, Pinjaman, dan Buku Kas.
+                    </span>
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">
+                      Metode Pembayaran:
+                    </label>
+                    <select
+                      value={metodeBayar}
+                      onChange={(e) => setMetodeBayar(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-800 outline-none focus:border-[#2563eb]"
+                    >
+                      <option value="Tunai">Tunai (Kasir)</option>
+                      <option value="Potong Gaji">Potong Gaji (Payroll)</option>
+                      <option value="Transfer Bank">Transfer Bank</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Komponen Simpanan */}
               <div>
                 <h4 className="font-extrabold text-slate-800 mb-2 pb-1 border-b border-slate-100 flex items-center gap-1.5">
                   <span className="material-symbols-outlined text-[#2563eb] text-sm">savings</span>
-                  Komponen Simpanan
+                  Komponen Simpanan (Bertambah di Menu Simpanan)
                 </h4>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
@@ -570,57 +821,206 @@ export default function TagihanPage() {
                 </div>
               </div>
 
-              {/* Potongan Pinjaman & Sembako */}
+              {/* Komponen Pinjaman & Sembako */}
               <div>
-                <h4 className="font-extrabold text-slate-800 mb-2 pb-1 border-b border-slate-100 flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-amber-600 text-sm">payments</span>
-                  Komponen Potongan Pinjaman & Sembako
+                <h4 className="font-extrabold text-slate-800 mb-2 pb-1 border-b border-slate-100 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-amber-600 text-sm">payments</span>
+                    <span>Komponen Cicilan Pinjaman & Sembako</span>
+                  </div>
                 </h4>
-                <div className="grid grid-cols-4 gap-3">
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Cicilan Ke (Urutan)</label>
-                    <input
-                      type="text"
-                      value={editForm.cicilanKe}
-                      onChange={(e) => setEditForm({ ...editForm, cicilanKe: e.target.value })}
-                      placeholder="Contoh: 2"
-                      className="w-full px-3 py-2 bg-[#f8fafc] border border-slate-200 rounded-xl font-bold text-center text-slate-800 outline-none"
-                    />
+
+                {/* Info Pinjaman Berjalan Anggota */}
+                {activeLoanData ? (
+                  <div className="mb-3 space-y-3">
+                    <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-2xl flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-amber-900 text-[11px]">Pinjaman Berjalan:</span>
+                          <span className="font-mono font-bold text-amber-800 bg-white px-2 py-0.5 rounded border border-amber-200">
+                            {activeLoanData.nomor_pinjaman}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-amber-800 mt-1">
+                          Total Pinjaman: <span className="font-bold">{formatRupiah(activeLoanData.total_pinjaman)}</span> • Sisa Hutang: <span className="font-bold text-rose-600">{formatRupiah(activeLoanData.sisa_hutang)}</span> • Tenor: <span className="font-bold">{activeLoanData.tenor} Bulan</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Selector Mode Cicilan: Sesuai Skema vs Input Sendiri */}
+                    <div className="flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200 gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCicilanMode('skema');
+                          handleSelectSkemaCicilan(selectedCicilanBulan || 1);
+                        }}
+                        className={`flex-1 py-1.5 px-3 rounded-lg font-bold text-center transition-all cursor-pointer ${
+                          cicilanMode === 'skema'
+                            ? 'bg-white text-[#2563eb] shadow-xs font-black'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        📌 Sesuai Skema Cicilan (Ke-{selectedCicilanBulan})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCicilanMode('custom')}
+                        className={`flex-1 py-1.5 px-3 rounded-lg font-bold text-center transition-all cursor-pointer ${
+                          cicilanMode === 'custom'
+                            ? 'bg-white text-[#2563eb] shadow-xs font-black'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        ✏️ Input Nominal Sendiri
+                      </button>
+                    </div>
+
+                    {/* Jika Mode Sesuai Skema */}
+                    {cicilanMode === 'skema' && (
+                      <div className="p-3 bg-blue-50/40 border border-blue-200/80 rounded-2xl space-y-2">
+                        <label className="font-extrabold text-slate-800 block">
+                          Pilih Angsuran Cicilan Ke:
+                        </label>
+                        <select
+                          value={selectedCicilanBulan}
+                          onChange={(e) => handleSelectSkemaCicilan(e.target.value)}
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-800 outline-none focus:border-[#2563eb]"
+                        >
+                          {(activeLoanData.jadwal_lengkap || []).map((sch) => (
+                            <option key={sch.bulanKe} value={sch.bulanKe}>
+                              Cicilan Ke-{sch.bulanKe}: {formatRupiah(sch.totalTagihan)} {sch.status === 'Lunas' ? '✓ (Sudah Lunas)' : sch.status === 'Sebagian' ? `(Sisa: ${formatRupiah(sch.sisaKurang)})` : ''}
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* Rincian Skema Terpilih */}
+                        <div className="grid grid-cols-3 gap-2 pt-1 text-[11px]">
+                          <div className="bg-white p-2 rounded-xl border border-slate-200 text-center">
+                            <span className="text-[10px] text-slate-400 font-bold block">Pokok</span>
+                            <span className="font-extrabold text-slate-800">{formatRupiah(editForm.pokok || 0)}</span>
+                          </div>
+                          <div className="bg-white p-2 rounded-xl border border-slate-200 text-center">
+                            <span className="text-[10px] text-slate-400 font-bold block">Jasa (Bunga)</span>
+                            <span className="font-extrabold text-slate-800">{formatRupiah(editForm.jasa || 0)}</span>
+                          </div>
+                          <div className="bg-white p-2 rounded-xl border border-blue-200 text-center">
+                            <span className="text-[10px] text-[#2563eb] font-bold block">Total Angsuran</span>
+                            <span className="font-black text-[#2563eb]">
+                              {formatRupiah((Number(editForm.pokok) || 0) + (Number(editForm.jasa) || 0))}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Jika Mode Input Sendiri */}
+                    {cicilanMode === 'custom' && (
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="font-bold text-slate-700 block mb-1">Cicilan Ke (Urutan)</label>
+                          <input
+                            type="text"
+                            value={editForm.cicilanKe}
+                            onChange={(e) => setEditForm({ ...editForm, cicilanKe: e.target.value })}
+                            placeholder="Contoh: 2"
+                            className="w-full px-3 py-2 bg-[#f8fafc] border border-slate-200 rounded-xl font-bold text-center text-slate-800 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="font-bold text-slate-700 block mb-1">Pokok Pinjaman</label>
+                          <RupiahInput
+                            value={editForm.pokok}
+                            onChange={(val) => setEditForm({ ...editForm, pokok: val })}
+                            placeholder="0"
+                            className="!bg-[#f8fafc] !py-2 !rounded-xl"
+                          />
+                        </div>
+                        <div>
+                          <label className="font-bold text-slate-700 block mb-1">Jasa (Bunga Pinjaman)</label>
+                          <RupiahInput
+                            value={editForm.jasa}
+                            onChange={(val) => setEditForm({ ...editForm, jasa: val })}
+                            placeholder="0"
+                            className="!bg-[#f8fafc] !py-2 !rounded-xl"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Input Sembako jika ada pinjaman */}
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">Potongan Tagihan Sembako</label>
+                      <RupiahInput
+                        value={editForm.sembako}
+                        onChange={(val) => setEditForm({ ...editForm, sembako: val })}
+                        placeholder="0"
+                        className="!bg-[#f8fafc] !py-2 !rounded-xl"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Pokok Pinjaman</label>
-                    <RupiahInput
-                      value={editForm.pokok}
-                      onChange={(val) => setEditForm({ ...editForm, pokok: val })}
-                      placeholder="0"
-                      className="!bg-[#f8fafc] !py-2 !rounded-xl"
-                    />
+                ) : (
+                  /* Anggota tidak memiliki pinjaman aktif */
+                  <div className="space-y-3">
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-center gap-2 text-slate-500">
+                      <span className="material-symbols-outlined text-slate-400 text-lg">info</span>
+                      <span className="text-[11px] font-medium">
+                        Anggota ini tidak memiliki pinjaman aktif yang sedang berjalan.
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-3">
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">Cicilan Ke</label>
+                        <input
+                          type="text"
+                          value={editForm.cicilanKe}
+                          onChange={(e) => setEditForm({ ...editForm, cicilanKe: e.target.value })}
+                          placeholder="-"
+                          className="w-full px-3 py-2 bg-[#f8fafc] border border-slate-200 rounded-xl font-bold text-center text-slate-800 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">Pokok</label>
+                        <RupiahInput
+                          value={editForm.pokok}
+                          onChange={(val) => setEditForm({ ...editForm, pokok: val })}
+                          placeholder="0"
+                          className="!bg-[#f8fafc] !py-2 !rounded-xl"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">Jasa</label>
+                        <RupiahInput
+                          value={editForm.jasa}
+                          onChange={(val) => setEditForm({ ...editForm, jasa: val })}
+                          placeholder="0"
+                          className="!bg-[#f8fafc] !py-2 !rounded-xl"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">Sembako</label>
+                        <RupiahInput
+                          value={editForm.sembako}
+                          onChange={(val) => setEditForm({ ...editForm, sembako: val })}
+                          placeholder="0"
+                          className="!bg-[#f8fafc] !py-2 !rounded-xl"
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Jasa (Bunga Pinjaman)</label>
-                    <RupiahInput
-                      value={editForm.jasa}
-                      onChange={(val) => setEditForm({ ...editForm, jasa: val })}
-                      placeholder="0"
-                      className="!bg-[#f8fafc] !py-2 !rounded-xl"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Sembako</label>
-                    <RupiahInput
-                      value={editForm.sembako}
-                      onChange={(val) => setEditForm({ ...editForm, sembako: val })}
-                      placeholder="0"
-                      className="!bg-[#f8fafc] !py-2 !rounded-xl"
-                    />
-                  </div>
-                </div>
+                )}
               </div>
 
-              {/* Total Preview */}
-              <div className="bg-[#f8fafc] p-3 rounded-xl border border-slate-200 flex justify-between items-center text-xs">
-                <span className="font-bold text-slate-700">Total Tagihan Anggota:</span>
-                <span className="text-base font-black text-rose-600">
+              {/* Total Preview Box */}
+              <div className="bg-[#f8fafc] p-4 rounded-2xl border border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
+                <div>
+                  <span className="font-extrabold text-slate-800 block">Total Tagihan Anggota:</span>
+                  <span className="text-[10px] text-slate-500 block">
+                    Simpanan: {formatRupiah((Number(editForm.wajib) || 0) + (Number(editForm.sukarela) || 0) + (Number(editForm.qurban) || 0))} • Potongan: {formatRupiah((Number(editForm.pokok) || 0) + (Number(editForm.jasa) || 0) + (Number(editForm.sembako) || 0))}
+                  </span>
+                </div>
+                <span className="text-xl font-black text-rose-600">
                   {formatRupiah(
                     (Number(editForm.wajib) || 0) +
                     (Number(editForm.sukarela) || 0) +
@@ -632,23 +1032,58 @@ export default function TagihanPage() {
                 </span>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              {/* Modal Actions */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setEditModalOpen(false)}
-                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-2xl font-bold transition-colors cursor-pointer"
+                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-2xl font-bold transition-colors cursor-pointer text-center"
                 >
                   Batal
                 </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-2xl font-extrabold transition-all shadow-md shadow-[#2563eb]/20 cursor-pointer"
-                >
-                  Simpan Perubahan
-                </button>
+
+                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap justify-end">
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                    title="Hanya menyimpan penyesuaian nominal tanpa memproses transaksi pembayaran"
+                  >
+                    <span className="material-symbols-outlined text-base">save</span>
+                    Simpan Tagihan Saja
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleBayarkanSemua}
+                    disabled={isProcessingBayar}
+                    className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl font-extrabold transition-all shadow-md shadow-emerald-600/25 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-base">
+                      {isProcessingBayar ? 'hourglass_top' : 'payments'}
+                    </span>
+                    <span>
+                      {isProcessingBayar ? 'Memproses...' : 'Bayarkan Semua'}
+                    </span>
+                  </button>
+                </div>
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* Floating Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-[120] bg-[#0f172a] text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-slate-700/60 flex items-center gap-3 animate-slide-up max-w-md">
+          <span className="material-symbols-outlined text-emerald-400 text-2xl">check_circle</span>
+          <div className="text-xs font-semibold leading-relaxed">{toastMessage}</div>
+          <button
+            type="button"
+            onClick={() => setToastMessage('')}
+            className="text-slate-400 hover:text-white ml-auto cursor-pointer p-1"
+          >
+            <span className="material-symbols-outlined text-sm">close</span>
+          </button>
         </div>
       )}
     </AppLayout>
