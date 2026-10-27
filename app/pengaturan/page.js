@@ -303,12 +303,12 @@ export default function PengaturanPage() {
     }
   };
 
-  // Clear all demo data
+  // Clear all transactions data without deleting members
   const handleClearAllData = async () => {
-    if (confirm('KONFIRMASI: Apakah Anda yakin ingin MENGHAPUS SEMUA DATA transaksi (Anggota, Simpanan, Pinjaman, Buku Kas, Toko, Qurban)?\n\nDatabase akan dikosongkan bersih sehingga siap diisi data operasional riil.')) {
+    if (confirm('KONFIRMASI: Apakah Anda yakin ingin MENGOSONGKAN SELURUH DATA TRANSAKSI (Simpanan, Pinjaman, Angsuran, Buku Kas, Transaksi Toko, & Mutasi Qurban)?\n\nCATATAN PENTING: Data Anggota dan Pengguna Admin TIDAK AKAN DIHAPUS.')) {
       dataService.clearAllData();
       await dataService.clearSupabaseData();
-      showToast('Seluruh data transaksi berhasil dibersihkan!');
+      showToast('Seluruh riwayat transaksi berhasil dikosongkan! Data anggota tetap aman.');
       loadData();
     }
   };
@@ -898,7 +898,7 @@ export default function PengaturanPage() {
                 <div className="border border-rose-200 rounded-2xl p-4 flex flex-col justify-between gap-3 bg-rose-50/40">
                   <div>
                     <h3 className="font-extrabold text-rose-800">Reset Semua Transaksi</h3>
-                    <p className="text-slate-500 text-[11px] mt-1 font-medium">Kosongkan riwayat data transaksi anggota, simpanan, & pinjaman.</p>
+                    <p className="text-slate-500 text-[11px] mt-1 font-medium">Kosongkan riwayat transaksi (simpanan, pinjaman, kas, & toko). Data anggota tetap aman.</p>
                   </div>
                   <button
                     type="button"
