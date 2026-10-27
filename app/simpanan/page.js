@@ -35,7 +35,9 @@ export default function SimpananPage() {
     jumlah: '',
     metode: 'Tunai',
     keterangan: '',
-    updateNominalRutin: true
+    updateNominalRutin: true,
+    isTarikSemuaKeluar: false,
+    tandaiKeluar: true
   });
 
   // Modal: Ubah Nominal Sukarela Bulanan
@@ -82,6 +84,18 @@ export default function SimpananPage() {
     loadData();
     dataService.fetchFromSupabase().catch(() => {});
 
+    // Cek query params jika diarahkan dari halaman anggota / lainnya
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tarikSemuaNo = params.get('tarikSemua');
+      const tarikWajibNo = params.get('tarikWajib');
+      if (tarikSemuaNo) {
+        handleOpenModal(tarikSemuaNo, 'Penarikan', 'Wajib', true);
+      } else if (tarikWajibNo) {
+        handleOpenModal(tarikWajibNo, 'Penarikan', 'Wajib', false);
+      }
+    }
+
     const handleUpdate = () => {
       loadData();
     };
@@ -95,16 +109,27 @@ export default function SimpananPage() {
     setTimeout(() => setToastMessage(''), 3500);
   };
 
-  const handleOpenModal = (nomorAnggota = '', defaultTipe = 'Setoran') => {
+  const handleOpenModal = (nomorAnggota = '', defaultTipe = 'Setoran', defaultJenis = 'Sukarela', isTarikSemua = false) => {
     const selectedNomor = nomorAnggota || (anggotaList.length > 0 ? (anggotaList[0].nomor_anggota || anggotaList[0].id) : '');
+    let defaultKet = '';
+    if (isTarikSemua) {
+      defaultKet = 'Pengambilan Seluruh Simpanan (Keluar Keanggotaan Koperasi)';
+    } else if (defaultTipe === 'Penarikan' && defaultJenis === 'Wajib') {
+      defaultKet = 'Pengambilan Simpanan Wajib (Keluar / Pengunduran Diri Anggota)';
+    } else if (defaultTipe === 'Penarikan' && defaultJenis === 'Pokok') {
+      defaultKet = 'Pengambilan Simpanan Pokok (Keluar / Pengunduran Diri Anggota)';
+    }
+
     setFormData({
       nomor_anggota: selectedNomor,
-      jenis: 'Sukarela',
+      jenis: defaultJenis,
       tipe: defaultTipe,
       jumlah: '',
       metode: 'Tunai',
-      keterangan: '',
-      updateNominalRutin: true
+      keterangan: defaultKet,
+      updateNominalRutin: true,
+      isTarikSemuaKeluar: isTarikSemua,
+      tandaiKeluar: true
     });
     setModalOpen(true);
   };
@@ -131,15 +156,66 @@ export default function SimpananPage() {
     showToast(`Nominal Simpanan Sukarela bulanan untuk ${selectedNominalMember.nama_anggota} berhasil diperbarui menjadi ${formatRupiah(nominalSukarelaValue)}.`);
   };
 
-  const handleSubmitTransaction = (e) => {
+  const handleSubmitTransaction = async (e) => {
     e.preventDefault();
     if (!formData.nomor_anggota) {
       alert('Pilih anggota terlebih dahulu.');
       return;
     }
+
+    // A. Mode Penarikan Seluruh Simpanan Sekaligus (Keluar Keanggotaan)
+    if (formData.tipe === 'Penarikan' && formData.isTarikSemuaKeluar) {
+      const bal = dataService.getMemberSimpananBalance(formData.nomor_anggota);
+      if (bal.total <= 0) {
+        alert('Anggota ini tidak memiliki saldo simpanan (saldo Rp 0).');
+        return;
+      }
+
+      const mName = selectedModalMember ? (selectedModalMember.nama || selectedModalMember.nama_lengkap) : formData.nomor_anggota;
+      if (!confirm(`KONFIRMASI PENGAMBILAN SELURUH SIMPANAN:\n\n` +
+        `Anggota: ${mName} (${formData.nomor_anggota})\n` +
+        `- Simpanan Wajib: ${formatRupiah(bal.wajib)}\n` +
+        `- Simpanan Sukarela: ${formatRupiah(bal.sukarela)}\n` +
+        `- Simpanan Pokok: ${formatRupiah(bal.pokok)}\n` +
+        `-----------------------------------------\n` +
+        `TOTAL PENGEMBALIAN DANA: ${formatRupiah(bal.total)}\n\n` +
+        `${formData.tandaiKeluar ? 'Status keanggotaan akan otomatis diubah menjadi "Keluar".\n\n' : ''}` +
+        `Apakah Anda yakin ingin memproses penarikan ini?`)) {
+        return;
+      }
+
+      await dataService.tarikSemuaSimpananAnggota({
+        nomor_anggota: formData.nomor_anggota,
+        metode: formData.metode,
+        keterangan: formData.keterangan || 'Pengambilan Seluruh Simpanan (Keluar Keanggotaan)',
+        updateStatusKeluar: formData.tandaiKeluar
+      });
+
+      setModalOpen(false);
+      loadData();
+      showToast(`Pengambilan seluruh simpanan ${mName} sebesar ${formatRupiah(bal.total)} berhasil dicatat!`);
+      return;
+    }
+
+    // B. Mode Penarikan atau Setoran Per Jenis Simpanan (termasuk Simpanan Wajib)
     if (!formData.jumlah || Number(formData.jumlah) <= 0) {
       alert('Nominal harus lebih dari 0.');
       return;
+    }
+
+    if (formData.tipe === 'Penarikan') {
+      const bal = dataService.getMemberSimpananBalance(formData.nomor_anggota);
+      const maxAvailable = formData.jenis === 'Wajib'
+        ? bal.wajib
+        : formData.jenis === 'Pokok'
+        ? bal.pokok
+        : bal.sukarela;
+
+      if (Number(formData.jumlah) > maxAvailable) {
+        if (!confirm(`PERINGATAN: Nominal penarikan (${formatRupiah(formData.jumlah)}) melebihi saldo Simpanan ${formData.jenis} anggota saat ini (${formatRupiah(maxAvailable)}).\n\nApakah Anda tetap ingin melanjutkan penarikan ini?`)) {
+          return;
+        }
+      }
     }
 
     dataService.addSimpananTransaction({
@@ -154,7 +230,7 @@ export default function SimpananPage() {
 
     setModalOpen(false);
     loadData();
-    showToast(`Transaksi Simpanan ${formData.jenis} sebesar ${formatRupiah(formData.jumlah)} berhasil dicatat!`);
+    showToast(`Transaksi ${formData.tipe} Simpanan ${formData.jenis} sebesar ${formatRupiah(formData.jumlah)} berhasil dicatat!`);
   };
 
   // Delete Action Handlers
@@ -622,6 +698,32 @@ export default function SimpananPage() {
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
+                                      handleOpenModal(group.nomor_anggota, 'Penarikan', 'Wajib', false);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-[11px] font-extrabold transition-all shadow-2xs cursor-pointer active:scale-95"
+                                    title={`Ambil / Tarik Simpanan Wajib untuk ${group.nama_anggota} (Pengunduran Diri / Keluar)`}
+                                  >
+                                    <span className="material-symbols-outlined text-[15px] text-indigo-600">output</span>
+                                    <span>Tarik Simp. Wajib</span>
+                                  </button>
+                                  {group.total > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenModal(group.nomor_anggota, 'Penarikan', 'Wajib', true);
+                                      }}
+                                      className="inline-flex items-center gap-1 px-3 py-1.5 border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-[11px] font-extrabold transition-all shadow-2xs cursor-pointer active:scale-95"
+                                      title={`Tutup Akun & Tarik Seluruh Simpanan untuk ${group.nama_anggota} (Keluar Anggota)`}
+                                    >
+                                      <span className="material-symbols-outlined text-[15px] text-rose-600">logout</span>
+                                      <span>Tarik Semua (Keluar)</span>
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                       handleOpenModal(group.nomor_anggota);
                                     }}
                                     className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-xl text-[11px] font-extrabold transition-all shadow-2xs cursor-pointer active:scale-95"
@@ -787,8 +889,8 @@ export default function SimpananPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
-                      onClick={() => setFormData({ ...formData, tipe: 'Setoran' })}
-                      className={`py-2.5 rounded-2xl font-extrabold border transition-all ${
+                      onClick={() => setFormData({ ...formData, tipe: 'Setoran', isTarikSemuaKeluar: false, keterangan: '' })}
+                      className={`py-2.5 rounded-2xl font-extrabold border transition-all cursor-pointer ${
                         formData.tipe === 'Setoran'
                           ? 'bg-[#2563eb] text-white border-[#2563eb] shadow-xs'
                           : 'bg-white text-slate-600 border-slate-200 hover:bg-[#f8fafc]'
@@ -798,8 +900,13 @@ export default function SimpananPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setFormData({ ...formData, tipe: 'Penarikan', jenis: 'Sukarela' })}
-                      className={`py-2.5 rounded-2xl font-extrabold border transition-all ${
+                      onClick={() => setFormData({
+                        ...formData,
+                        tipe: 'Penarikan',
+                        jenis: formData.jenis === 'Pokok' ? 'Pokok' : 'Wajib',
+                        keterangan: 'Pengambilan Simpanan Wajib (Keluar Anggota)'
+                      })}
+                      className={`py-2.5 rounded-2xl font-extrabold border transition-all cursor-pointer ${
                         formData.tipe === 'Penarikan'
                           ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
                           : 'bg-white text-slate-600 border-slate-200 hover:bg-[#f8fafc]'
@@ -822,37 +929,212 @@ export default function SimpananPage() {
                     <option value="">-- Pilih Anggota --</option>
                     {anggotaList.map((a) => (
                       <option key={a.id || a.nomor_anggota} value={a.nomor_anggota || a.id}>
-                        {a.nomor_anggota || a.id} - {a.nama || a.nama_lengkap}
+                        {a.nomor_anggota || a.id} - {a.nama || a.nama_lengkap} ({a.status_keanggotaan || a.status || 'Aktif'})
                       </option>
                     ))}
                   </select>
                 </div>
 
-                {/* Jenis Simpanan */}
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Jenis Simpanan</label>
-                  <select
-                    value={formData.jenis}
-                    disabled={formData.tipe === 'Penarikan'}
-                    onChange={(e) => setFormData({ ...formData, jenis: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200 rounded-2xl focus:border-[#2563eb] focus:bg-white outline-none font-semibold text-slate-800 transition-all disabled:bg-slate-100"
-                  >
-                    <option value="Sukarela">Simpanan Sukarela (Bebas Setor/Tarik)</option>
-                    <option value="Wajib">Simpanan Wajib (Bulanan)</option>
-                    <option value="Pokok">Simpanan Pokok</option>
-                  </select>
-                </div>
+                {/* Info Saldo Anggota jika tipe Penarikan */}
+                {formData.tipe === 'Penarikan' && formData.nomor_anggota && (() => {
+                  const bal = dataService.getMemberSimpananBalance(formData.nomor_anggota);
+                  return (
+                    <div className="bg-rose-50/70 border border-rose-200 rounded-2xl p-3 flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-extrabold text-rose-900 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-sm text-rose-600">account_balance_wallet</span>
+                          Saldo Tersedia Anggota
+                        </span>
+                        <span className="text-[10px] font-extrabold text-[#2563eb] bg-white px-2 py-0.5 rounded-full border border-blue-200">
+                          Total: {formatRupiah(bal.total)}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-1.5 text-center">
+                        <div className={`p-2 rounded-xl border ${formData.jenis === 'Wajib' && !formData.isTarikSemuaKeluar ? 'bg-white border-indigo-400 shadow-2xs font-extrabold' : 'bg-white/60 border-rose-100'}`}>
+                          <span className="text-[9px] text-slate-500 font-bold block uppercase">Simp. Wajib</span>
+                          <span className="text-[11px] font-black text-indigo-700">{formatRupiah(bal.wajib)}</span>
+                        </div>
+                        <div className={`p-2 rounded-xl border ${formData.jenis === 'Sukarela' && !formData.isTarikSemuaKeluar ? 'bg-white border-amber-400 shadow-2xs font-extrabold' : 'bg-white/60 border-rose-100'}`}>
+                          <span className="text-[9px] text-slate-500 font-bold block uppercase">Sukarela</span>
+                          <span className="text-[11px] font-black text-amber-700">{formatRupiah(bal.sukarela)}</span>
+                        </div>
+                        <div className={`p-2 rounded-xl border ${formData.jenis === 'Pokok' && !formData.isTarikSemuaKeluar ? 'bg-white border-blue-400 shadow-2xs font-extrabold' : 'bg-white/60 border-rose-100'}`}>
+                          <span className="text-[9px] text-slate-500 font-bold block uppercase">Pokok</span>
+                          <span className="text-[11px] font-black text-blue-700">{formatRupiah(bal.pokok)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
 
-                {/* Nominal */}
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Nominal Jumlah (Rp) *</label>
-                  <RupiahInput
-                    required
-                    value={formData.jumlah}
-                    onChange={(val) => setFormData({ ...formData, jumlah: val })}
-                    className="focus:border-[#2563eb] font-extrabold text-[#2563eb] text-sm bg-[#f8fafc] rounded-2xl"
-                  />
-                </div>
+                {/* Sub-Pilihan Penarikan: Tarik Per Jenis vs Tarik Semua Keluar Anggota */}
+                {formData.tipe === 'Penarikan' && (
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Mode Penarikan</label>
+                    <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-2xl">
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, isTarikSemuaKeluar: false })}
+                        className={`py-2 px-3 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                          !formData.isTarikSemuaKeluar
+                            ? 'bg-white text-rose-600 shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Tarik Per Jenis Simpanan
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData({
+                            ...formData,
+                            isTarikSemuaKeluar: true,
+                            keterangan: 'Pengambilan Seluruh Simpanan (Keluar Keanggotaan Koperasi)'
+                          });
+                        }}
+                        className={`py-2 px-3 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                          formData.isTarikSemuaKeluar
+                            ? 'bg-white text-rose-600 shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Tutup & Tarik Semua (Keluar)
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Form Field Jika Tarik Per Jenis Simpanan atau Setoran */}
+                {!formData.isTarikSemuaKeluar ? (
+                  <>
+                    {/* Jenis Simpanan */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="font-bold text-slate-700">Jenis Simpanan *</label>
+                        {formData.tipe === 'Penarikan' && formData.jenis === 'Wajib' && (
+                          <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md">
+                            Khusus Anggota Keluar / Tutup Akun
+                          </span>
+                        )}
+                      </div>
+                      <select
+                        value={formData.jenis}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          let ket = formData.keterangan;
+                          if (formData.tipe === 'Penarikan') {
+                            if (val === 'Wajib') ket = 'Pengambilan Simpanan Wajib (Keluar / Pengunduran Diri Anggota)';
+                            else if (val === 'Pokok') ket = 'Pengambilan Simpanan Pokok (Keluar / Pengunduran Diri Anggota)';
+                            else if (val === 'Sukarela') ket = 'Penarikan Simpanan Sukarela';
+                          }
+                          setFormData({ ...formData, jenis: val, keterangan: ket });
+                        }}
+                        className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200 rounded-2xl focus:border-[#2563eb] focus:bg-white outline-none font-semibold text-slate-800 transition-all"
+                      >
+                        {formData.tipe === 'Penarikan' ? (
+                          <>
+                            <option value="Wajib">Simpanan Wajib (Pengambilan saat Keluar Anggota)</option>
+                            <option value="Sukarela">Simpanan Sukarela (Bebas Ditarik Kapanpun)</option>
+                            <option value="Pokok">Simpanan Pokok (Pengambilan saat Keluar Anggota)</option>
+                          </>
+                        ) : (
+                          <>
+                            <option value="Sukarela">Simpanan Sukarela (Bebas Setor/Tarik)</option>
+                            <option value="Wajib">Simpanan Wajib (Bulanan)</option>
+                            <option value="Pokok">Simpanan Pokok (Pendaftaran)</option>
+                          </>
+                        )}
+                      </select>
+                      {formData.tipe === 'Penarikan' && formData.jenis === 'Wajib' && (
+                        <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                          💡 <strong>Catatan:</strong> Simpanan Wajib secara aturan koperasi dapat diambil kembali saat anggota berhenti / mengundurkan diri dari keanggotaan.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Nominal */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="font-bold text-slate-700">Nominal Jumlah (Rp) *</label>
+                        {formData.tipe === 'Penarikan' && formData.nomor_anggota && (() => {
+                          const bal = dataService.getMemberSimpananBalance(formData.nomor_anggota);
+                          const maxSaldo = formData.jenis === 'Wajib' ? bal.wajib : formData.jenis === 'Pokok' ? bal.pokok : bal.sukarela;
+                          if (maxSaldo > 0) {
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => setFormData({ ...formData, jumlah: maxSaldo })}
+                                className="text-[10px] font-bold text-rose-600 hover:underline cursor-pointer"
+                              >
+                                Tarik Penuh Saldo: {formatRupiah(maxSaldo)}
+                              </button>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
+                      <RupiahInput
+                        required
+                        value={formData.jumlah}
+                        onChange={(val) => setFormData({ ...formData, jumlah: val })}
+                        className={`font-extrabold text-sm bg-[#f8fafc] rounded-2xl ${
+                          formData.tipe === 'Penarikan'
+                            ? 'focus:border-rose-500 text-rose-700'
+                            : 'focus:border-[#2563eb] text-[#2563eb]'
+                        }`}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  /* Form Khusus Tarik Seluruh Simpanan Sekaligus (Keluar Anggota) */
+                  (() => {
+                    const bal = dataService.getMemberSimpananBalance(formData.nomor_anggota);
+                    return (
+                      <div className="p-4 bg-rose-50/80 border border-rose-200 rounded-2xl flex flex-col gap-3">
+                        <div>
+                          <h4 className="font-extrabold text-xs text-rose-900 flex items-center gap-1.5">
+                            <span className="material-symbols-outlined text-rose-600 text-base">logout</span>
+                            Ringkasan Pengembalian Seluruh Simpanan
+                          </h4>
+                          <p className="text-[11px] text-rose-700 mt-0.5 leading-relaxed">
+                            Semua saldo simpanan anggota ini akan ditarik lunas dan otomatis dicatat sebagai pengeluaran kas.
+                          </p>
+                        </div>
+
+                        <div className="space-y-1.5 bg-white p-3 rounded-xl border border-rose-100 text-xs">
+                          <div className="flex justify-between text-slate-600">
+                            <span>1. Simpanan Wajib:</span>
+                            <span className="font-bold text-slate-800">{formatRupiah(bal.wajib)}</span>
+                          </div>
+                          <div className="flex justify-between text-slate-600">
+                            <span>2. Simpanan Sukarela:</span>
+                            <span className="font-bold text-slate-800">{formatRupiah(bal.sukarela)}</span>
+                          </div>
+                          <div className="flex justify-between text-slate-600">
+                            <span>3. Simpanan Pokok:</span>
+                            <span className="font-bold text-slate-800">{formatRupiah(bal.pokok)}</span>
+                          </div>
+                          <div className="flex justify-between pt-2 border-t border-dashed border-slate-200 font-black text-rose-700 text-sm">
+                            <span>TOTAL KAS DIKELUARKAN:</span>
+                            <span>{formatRupiah(bal.total)}</span>
+                          </div>
+                        </div>
+
+                        <label className="flex items-center gap-2 cursor-pointer bg-white/70 p-2.5 rounded-xl border border-rose-200">
+                          <input
+                            type="checkbox"
+                            checked={formData.tandaiKeluar}
+                            onChange={(e) => setFormData({ ...formData, tandaiKeluar: e.target.checked })}
+                            className="w-4 h-4 text-rose-600 rounded border-slate-300 focus:ring-rose-500 cursor-pointer"
+                          />
+                          <span className="text-xs font-bold text-slate-800">
+                            Otomatis ubah status keanggotaan menjadi &quot;Keluar&quot;
+                          </span>
+                        </label>
+                      </div>
+                    );
+                  })()
+                )}
 
                 {/* Metode Pembayaran */}
                 <div>
@@ -875,13 +1157,17 @@ export default function SimpananPage() {
                     type="text"
                     value={formData.keterangan}
                     onChange={(e) => setFormData({ ...formData, keterangan: e.target.value })}
-                    placeholder="Contoh: Setoran sukarela tabungan qurban"
+                    placeholder={
+                      formData.tipe === 'Penarikan'
+                        ? 'Contoh: Pengambilan simpanan wajib karena keluar anggota'
+                        : 'Contoh: Setoran sukarela tabungan qurban'
+                    }
                     className="w-full px-3.5 py-2.5 bg-[#f8fafc] border border-slate-200 rounded-2xl focus:border-[#2563eb] focus:bg-white outline-none font-semibold text-slate-800 transition-all"
                   />
                 </div>
 
                 {/* Sinkronisasi Tagihan Bulanan Sukarela */}
-                {formData.jenis === 'Sukarela' && formData.tipe === 'Setoran' && (
+                {formData.jenis === 'Sukarela' && formData.tipe === 'Setoran' && !formData.isTarikSemuaKeluar && (
                   <div className="bg-amber-50/90 border border-amber-200 rounded-2xl p-3.5 flex items-start gap-2.5">
                     <input
                       type="checkbox"
@@ -904,15 +1190,21 @@ export default function SimpananPage() {
                 <button
                   type="button"
                   onClick={() => setModalOpen(false)}
-                  className="px-4 py-2 border border-slate-200 rounded-full font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+                  className="px-4 py-2 border border-slate-200 rounded-full font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-full font-extrabold shadow-sm transition-all cursor-pointer"
+                  className={`px-6 py-2 text-white rounded-full font-extrabold shadow-sm transition-all cursor-pointer ${
+                    formData.tipe === 'Penarikan'
+                      ? 'bg-rose-600 hover:bg-rose-700'
+                      : 'bg-[#2563eb] hover:bg-[#1d4ed8]'
+                  }`}
                 >
-                  Simpan Transaksi
+                  {formData.tipe === 'Penarikan'
+                    ? (formData.isTarikSemuaKeluar ? 'Konfirmasi Tarik Seluruh Simpanan' : `Proses Penarikan ${formData.jenis}`)
+                    : 'Simpan Transaksi'}
                 </button>
               </div>
             </form>

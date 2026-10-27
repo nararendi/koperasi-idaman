@@ -408,9 +408,21 @@ export default function DaftarAnggotaPage() {
                 </div>
                 <div>
                   <span className="text-slate-400 font-bold block">Total Saldo Simpanan:</span>
-                  <span className="font-extrabold text-[#2563eb] text-sm">
-                    {formatRupiah(selectedAnggota?.totalSimpanan || 0)}
-                  </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-extrabold text-[#2563eb] text-sm">
+                      {formatRupiah(selectedAnggota?.totalSimpanan || 0)}
+                    </span>
+                    {(selectedAnggota?.totalSimpanan || 0) > 0 && (
+                      <Link
+                        href={`/simpanan?tarikSemua=${selectedAnggota?.nomor_anggota || selectedAnggota?.id}`}
+                        className="inline-flex items-center gap-1 text-[10px] font-extrabold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1 rounded-xl transition-colors"
+                        title="Tarik seluruh simpanan anggota jika keluar dari koperasi"
+                      >
+                        <span className="material-symbols-outlined text-[13px]">logout</span>
+                        Tarik Simpanan (Keluar)
+                      </Link>
+                    )}
+                  </div>
                 </div>
                 <div className="col-span-2 sm:col-span-3">
                   <span className="text-slate-400 font-bold block">Alamat Lengkap:</span>
@@ -438,14 +450,24 @@ export default function DaftarAnggotaPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {selectedAnggota.simpananList.map((s) => (
-                          <tr key={s.id}>
-                            <td className="px-3 py-2 text-slate-600">{s.tanggal}</td>
-                            <td className="px-3 py-2 font-bold text-[#2563eb]">{s.jenis}</td>
-                            <td className="px-3 py-2 text-right font-extrabold">{formatRupiah(s.jumlah || 0)}</td>
-                            <td className="px-3 py-2 text-slate-500">{s.keterangan}</td>
-                          </tr>
-                        ))}
+                        {selectedAnggota.simpananList.map((s) => {
+                          const isWithdrawal = s.tipe === 'Penarikan' || (s.keterangan || '').toLowerCase().includes('tarik');
+                          return (
+                            <tr key={s.id}>
+                              <td className="px-3 py-2 text-slate-600">{s.tanggal}</td>
+                              <td className="px-3 py-2 font-bold text-[#2563eb]">
+                                <span>{s.jenis}</span>
+                                {isWithdrawal && (
+                                  <span className="ml-1 text-[9px] px-1.5 py-0.5 bg-rose-50 text-rose-600 font-bold rounded">Tarik</span>
+                                )}
+                              </td>
+                              <td className={`px-3 py-2 text-right font-extrabold ${isWithdrawal ? 'text-rose-600' : 'text-slate-800'}`}>
+                                {isWithdrawal ? '-' : '+'}{formatRupiah(s.jumlah || 0)}
+                              </td>
+                              <td className="px-3 py-2 text-slate-500">{s.keterangan}</td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
