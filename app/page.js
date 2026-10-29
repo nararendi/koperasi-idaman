@@ -169,6 +169,20 @@ export default function HomePage() {
                 <button
                   type="button"
                   onClick={() => {
+                    downloadTemplateSimpananMultiCsv(settings, anggotaList);
+                    setTemplateMenuOpen(false);
+                  }}
+                  className="w-full px-3.5 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-[#eff6ff] hover:text-[#2563eb] flex items-center justify-between cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-base text-[#2563eb]">table_chart</span>
+                    <span>Template CSV (.csv)</span>
+                  </div>
+                  <span className="text-[9px] bg-emerald-50 text-emerald-700 font-extrabold px-1.5 py-0.5 rounded-full uppercase">Paling Lancar</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
                     downloadTemplateSimpananMultiExcel(settings, anggotaList);
                     setTemplateMenuOpen(false);
                   }}
@@ -176,17 +190,6 @@ export default function HomePage() {
                 >
                   <span className="material-symbols-outlined text-base text-[#047857]">description</span>
                   <span>Template Excel (.xls)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    downloadTemplateSimpananMultiCsv(settings, anggotaList);
-                    setTemplateMenuOpen(false);
-                  }}
-                  className="w-full px-3.5 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-[#eff6ff] hover:text-[#2563eb] flex items-center gap-2 cursor-pointer transition-colors"
-                >
-                  <span className="material-symbols-outlined text-base text-slate-500">table_chart</span>
-                  <span>Template CSV (.csv)</span>
                 </button>
               </div>
             )}

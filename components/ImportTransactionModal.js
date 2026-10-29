@@ -22,7 +22,7 @@ export default function ImportTransactionModal({
   const [parseError, setParseError] = useState('');
   const [parseResult, setParseResult] = useState(null);
   const [skipErrors, setSkipErrors] = useState(true);
-  const [activeFilter, setActiveFilter] = useState('all'); // 'all' | 'valid' | 'invalid'
+  const [activeFilter, setActiveFilter] = useState('all'); // 'all' | 'valid' | 'skipped' | 'invalid'
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -93,7 +93,7 @@ export default function ImportTransactionModal({
 
     const itemsToImport = parseResult.items.filter((item) => item.isValid);
     if (itemsToImport.length === 0) {
-      alert('Tidak ada baris data valid yang dapat diimpor.');
+      alert('Tidak ada baris data setoran yang dapat diimpor (seluruh anggota bernilai Rp 0).');
       return;
     }
 
@@ -129,7 +129,8 @@ export default function ImportTransactionModal({
   // Filter preview items
   const displayItems = (parseResult?.items || []).filter((item) => {
     if (activeFilter === 'valid') return item.isValid;
-    if (activeFilter === 'invalid') return !item.isValid;
+    if (activeFilter === 'skipped') return item.isSkipped;
+    if (activeFilter === 'invalid') return !item.isValid && !item.isSkipped;
     return true;
   });
 
@@ -174,21 +175,21 @@ export default function ImportTransactionModal({
             <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
               <button
                 type="button"
-                onClick={handleDownloadTemplateExcel}
-                className="flex-1 sm:flex-initial px-3.5 py-2 bg-white hover:bg-slate-50 border border-[#2563eb]/30 text-[#2563eb] rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-                title="Unduh template Excel dengan daftar anggota lengkap"
+                onClick={handleDownloadTemplateCsv}
+                className="flex-1 sm:flex-initial px-3.5 py-2 bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+                title="Unduh template CSV (Sangat direkomendasikan, 100% kompatibel di Excel tanpa peringatan)"
               >
-                <span className="material-symbols-outlined text-base text-[#047857]">description</span>
-                Template Excel (.xls)
+                <span className="material-symbols-outlined text-base text-[#ffd159]">verified</span>
+                Template CSV (Disarankan)
               </button>
               <button
                 type="button"
-                onClick={handleDownloadTemplateCsv}
+                onClick={handleDownloadTemplateExcel}
                 className="flex-1 sm:flex-initial px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-                title="Unduh template CSV"
+                title="Unduh template Excel (.xls)"
               >
-                <span className="material-symbols-outlined text-base text-slate-500">table_chart</span>
-                Template CSV
+                <span className="material-symbols-outlined text-base text-[#047857]">description</span>
+                Template Excel (.xls)
               </button>
             </div>
           </div>
@@ -266,9 +267,26 @@ export default function ImportTransactionModal({
           {parseError && (
             <div className="bg-[#fff1f2] border border-rose-200 rounded-2xl p-4 text-rose-700 flex items-start gap-3">
               <span className="material-symbols-outlined text-xl text-rose-500 shrink-0">error</span>
-              <div>
+              <div className="flex-1">
                 <h5 className="font-bold text-xs">Gagal Membaca File</h5>
-                <p className="text-[11px] text-rose-600 mt-0.5">{parseError}</p>
+                <p className="text-[11px] text-rose-600 mt-0.5 leading-relaxed">{parseError}</p>
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDownloadTemplateCsv}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold text-[10px] transition-colors inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-xs">download</span>
+                    Unduh Template CSV (Paling Lancar)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetFile}
+                    className="px-3 py-1.5 bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 rounded-lg font-bold text-[10px] transition-colors cursor-pointer"
+                  >
+                    Coba File Lain
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -279,8 +297,10 @@ export default function ImportTransactionModal({
               {/* METRIC CARDS */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                 <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Anggota</span>
-                  <div className="text-base font-extrabold text-[#0f172a] mt-0.5">{parseResult.validCount} Valid</div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Setoran Valid</span>
+                  <div className="text-base font-extrabold text-[#0f172a] mt-0.5">
+                    {parseResult.validCount} <span className="text-xs font-normal text-slate-500">Anggota</span>
+                  </div>
                 </div>
 
                 <div className="bg-[#eff6ff] p-3 rounded-2xl border border-[#bfdbfe] shadow-2xs">
@@ -306,7 +326,7 @@ export default function ImportTransactionModal({
 
               {/* TABLE FILTER TABS & CONTROL */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-2">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <button
                     type="button"
                     onClick={() => setActiveFilter('all')}
@@ -327,8 +347,21 @@ export default function ImportTransactionModal({
                         : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700'
                     }`}
                   >
-                    Valid ({parseResult.validCount})
+                    Siap Diimpor ({parseResult.validCount})
                   </button>
+                  {parseResult.skippedCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveFilter('skipped')}
+                      className={`px-3 py-1.5 rounded-xl font-bold text-[11px] transition-colors cursor-pointer ${
+                        activeFilter === 'skipped'
+                          ? 'bg-slate-600 text-white'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-500'
+                      }`}
+                    >
+                      Dilewati Rp 0 ({parseResult.skippedCount})
+                    </button>
+                  )}
                   {parseResult.invalidCount > 0 && (
                     <button
                       type="button"
@@ -385,7 +418,11 @@ export default function ImportTransactionModal({
                         <tr
                           key={idx}
                           className={`transition-colors ${
-                            !item.isValid ? 'bg-[#fff1f2]/50 hover:bg-[#fff1f2]' : 'hover:bg-[#f8fafc]'
+                            !item.isValid && !item.isSkipped
+                              ? 'bg-[#fff1f2]/50 hover:bg-[#fff1f2]'
+                              : item.isSkipped
+                              ? 'bg-slate-50/60 opacity-60 hover:opacity-100'
+                              : 'hover:bg-[#f8fafc]'
                           }`}
                         >
                           <td className="px-3 py-2 text-center text-slate-400 font-mono font-medium">
@@ -394,7 +431,11 @@ export default function ImportTransactionModal({
                           <td className="px-3 py-2 whitespace-nowrap">
                             {item.isValid ? (
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-extrabold text-[9px] uppercase">
-                                Valid
+                                Siap Impor
+                              </span>
+                            ) : item.isSkipped ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-bold text-[9px]">
+                                Dilewati (Rp 0)
                               </span>
                             ) : (
                               <span
@@ -424,7 +465,7 @@ export default function ImportTransactionModal({
                             {item.sukarela > 0 ? formatRupiah(item.sukarela) : '-'}
                           </td>
                           <td className="px-3 py-2 text-right whitespace-nowrap font-extrabold text-[#2563eb]">
-                            {formatRupiah(item.totalSetoran)}
+                            {item.totalSetoran > 0 ? formatRupiah(item.totalSetoran) : '-'}
                           </td>
                         </tr>
                       ))
@@ -446,7 +487,12 @@ export default function ImportTransactionModal({
             Tutup
           </button>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {parseResult && parseResult.skippedCount > 0 && parseResult.validCount > 0 && (
+              <span className="text-[11px] text-slate-400 hidden sm:inline">
+                {parseResult.skippedCount} anggota Rp 0 akan dilewati
+              </span>
+            )}
             <button
               type="button"
               disabled={!parseResult || parseResult.validCount === 0 || isSubmitting}
@@ -454,7 +500,7 @@ export default function ImportTransactionModal({
               className={`px-6 sm:px-8 py-2.5 rounded-full font-extrabold text-xs shadow-sm flex items-center gap-2 transition-all cursor-pointer ${
                 !parseResult || parseResult.validCount === 0 || isSubmitting
                   ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                  : 'bg-[#2563eb] hover:bg-[#1d4ed8] text-white'
+                  : 'bg-[#2563eb] hover:bg-[#1d4ed8] text-white shadow-blue-500/20'
               }`}
             >
               {isSubmitting ? (
