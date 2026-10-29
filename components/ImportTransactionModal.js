@@ -186,10 +186,10 @@ export default function ImportTransactionModal({
                 type="button"
                 onClick={handleDownloadTemplateExcel}
                 className="flex-1 sm:flex-initial px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-                title="Unduh template Excel (.xls)"
+                title="Unduh template Excel (.xlsx)"
               >
                 <span className="material-symbols-outlined text-base text-[#047857]">description</span>
-                Template Excel (.xls)
+                Template Excel (.xlsx)
               </button>
             </div>
           </div>

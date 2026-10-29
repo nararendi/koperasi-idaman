@@ -189,7 +189,7 @@ export default function HomePage() {
                   className="w-full px-3.5 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-[#eff6ff] hover:text-[#2563eb] flex items-center gap-2 cursor-pointer transition-colors"
                 >
                   <span className="material-symbols-outlined text-base text-[#047857]">description</span>
-                  <span>Template Excel (.xls)</span>
+                  <span>Template Excel (.xlsx)</span>
                 </button>
               </div>
             )}
