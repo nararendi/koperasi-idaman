@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react';
 import AppLayout from '../../components/AppLayout';
 import Pagination from '../../components/Pagination';
 import RupiahInput from '../../components/RupiahInput';
+import ImportTransactionModal from '../../components/ImportTransactionModal';
 import { dataService } from '../../lib/dataService';
 import { excelExport } from '../../lib/excelExport';
+import { downloadTemplateKasExcel, downloadTemplateKasCsv } from '../../lib/transactionImport';
 import { formatRupiah } from '../../lib/formatters';
 
 export default function KasPage() {
@@ -22,6 +24,10 @@ export default function KasPage() {
   const [toastMessage, setToastMessage] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
+
+  // Import Modal & Template Menu State
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
 
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
@@ -112,15 +118,74 @@ export default function KasPage() {
       title="Buku Kas Harian & Arus Kas"
       subtitle="Pencatatan real-time penerimaan dan pengeluaran dana kas koperasi."
       rightAction={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Dropdown Unduh Template */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setTemplateMenuOpen(!templateMenuOpen)}
+              className="px-3.5 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 rounded-full text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[18px] text-[#047857]">file_download</span>
+              <span>Unduh Template</span>
+              <span className="material-symbols-outlined text-sm text-slate-400">expand_more</span>
+            </button>
+
+            {templateMenuOpen && (
+              <div
+                className="absolute right-0 mt-1.5 w-52 bg-white rounded-2xl shadow-xl border border-slate-100 py-1.5 z-50 animate-pop-in"
+                onMouseLeave={() => setTemplateMenuOpen(false)}
+              >
+                <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                  Format Template Kas
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    downloadTemplateKasExcel(settings);
+                    setTemplateMenuOpen(false);
+                  }}
+                  className="w-full px-3.5 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-[#eff6ff] hover:text-[#2563eb] flex items-center gap-2 cursor-pointer transition-colors"
+                >
+                  <span className="material-symbols-outlined text-base text-[#047857]">description</span>
+                  <span>Template Excel (.xls)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    downloadTemplateKasCsv();
+                    setTemplateMenuOpen(false);
+                  }}
+                  className="w-full px-3.5 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-[#eff6ff] hover:text-[#2563eb] flex items-center gap-2 cursor-pointer transition-colors"
+                >
+                  <span className="material-symbols-outlined text-base text-slate-500">table_chart</span>
+                  <span>Template CSV (.csv)</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Tombol Import Transaksi */}
+          <button
+            type="button"
+            onClick={() => setImportModalOpen(true)}
+            className="px-4 py-2 border border-[#2563eb]/40 bg-[#eff6ff] hover:bg-[#dbeafe] text-[#2563eb] rounded-full text-xs font-extrabold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[18px]">file_upload</span>
+            Import Transaksi
+          </button>
+
+          {/* Tombol Ekspor Excel */}
           <button
             type="button"
             onClick={handleExportExcel}
-            className="px-4 py-2 border border-[#2563eb]/30 bg-[#eff6ff] hover:bg-[#dbeafe] text-[#2563eb] rounded-full text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+            className="px-4 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 rounded-full text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
           >
             <span className="material-symbols-outlined text-[18px]">description</span>
             Ekspor Excel
           </button>
+
+          {/* Tombol Catat Mutasi Kas Manual */}
           <button
             type="button"
             onClick={handleOpenModal}
@@ -381,6 +446,18 @@ export default function KasPage() {
           </div>
         </div>
       )}
+
+      {/* MODAL IMPORT TRANSAKSI KAS */}
+      <ImportTransactionModal
+        isOpen={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        type="kas"
+        settings={settings}
+        onSuccess={({ count, totalMasuk, totalKeluar }) => {
+          loadData();
+          showToast(`Berhasil mengimpor ${count} transaksi kas! (+${formatRupiah(totalMasuk)} / -${formatRupiah(totalKeluar)})`);
+        }}
+      />
     </AppLayout>
   );
 }
