@@ -109,7 +109,9 @@ export default function ImportTransactionModal({
         if (onSuccess) {
           onSuccess({
             countMembers: itemsToImport.length,
-            countTransactions: res.countTransactions,
+            createdCount: res.createdCount || 0,
+            updatedCount: res.updatedCount || 0,
+            totalProcessed: res.totalProcessed || itemsToImport.length,
             grandTotal: parseResult.grandTotal
           });
         }

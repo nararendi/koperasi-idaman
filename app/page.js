@@ -512,9 +512,12 @@ export default function HomePage() {
         onClose={() => setImportModalOpen(false)}
         settings={settings}
         anggotaList={anggotaList}
-        onSuccess={({ countMembers, countTransactions, grandTotal }) => {
+        onSuccess={({ countMembers, createdCount, updatedCount, grandTotal }) => {
           loadDashboardData();
-          showToast(`Berhasil mengimpor setoran simpanan untuk ${countMembers} anggota (${countTransactions} transaksi) senilai ${formatRupiah(grandTotal)}!`);
+          const info = updatedCount > 0
+            ? `${countMembers} anggota (${createdCount} baru, ${updatedCount} disesuaikan/anti-dobel)`
+            : `${countMembers} anggota`;
+          showToast(`Berhasil mengimpor setoran simpanan ${info} senilai ${formatRupiah(grandTotal)}!`);
         }}
       />
     </AppLayout>
