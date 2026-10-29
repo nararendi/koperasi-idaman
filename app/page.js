@@ -3,7 +3,9 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import AppLayout from '../components/AppLayout';
+import ImportTransactionModal from '../components/ImportTransactionModal';
 import { dataService } from '../lib/dataService';
+import { downloadTemplateSimpananMultiExcel, downloadTemplateSimpananMultiCsv } from '../lib/transactionImport';
 import { formatRupiah } from '../lib/formatters';
 
 export default function HomePage() {
@@ -15,8 +17,12 @@ export default function HomePage() {
   });
 
   const [recentTransactions, setRecentTransactions] = useState([]);
+  const [anggotaList, setAnggotaList] = useState([]);
   const [settings, setSettings] = useState({});
   const [selectedBar, setSelectedBar] = useState(null);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
 
   const monthNames = [
     'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
@@ -105,7 +111,13 @@ export default function HomePage() {
     });
 
     setRecentTransactions(kasList.slice(0, 6));
+    setAnggotaList(anggota || []);
     setSettings(currentSettings);
+  };
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(''), 4000);
   };
 
   useEffect(() => {
@@ -133,13 +145,72 @@ export default function HomePage() {
       title="Ringkasan & Finansial Koperasi"
       subtitle={`Selamat datang di sistem manajemen ${settings.namaKoperasi || 'Koperasi Idaman'}`}
       rightAction={
-        <Link
-          href="/laporan"
-          className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-full px-5 py-2.5 text-xs font-extrabold flex items-center gap-2 shadow-sm hover:shadow-md transition-all cursor-pointer"
-        >
-          <span className="material-symbols-outlined text-base">download</span>
-          <span>Unduh Laporan</span>
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Dropdown Unduh Template */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setTemplateMenuOpen(!templateMenuOpen)}
+              className="px-3.5 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 rounded-full text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[18px] text-[#047857]">file_download</span>
+              <span>Unduh Template</span>
+              <span className="material-symbols-outlined text-sm text-slate-400">expand_more</span>
+            </button>
+
+            {templateMenuOpen && (
+              <div
+                className="absolute right-0 mt-1.5 w-60 bg-white rounded-2xl shadow-xl border border-slate-100 py-1.5 z-50 animate-pop-in"
+                onMouseLeave={() => setTemplateMenuOpen(false)}
+              >
+                <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                  Format Template Simpanan
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    downloadTemplateSimpananMultiExcel(settings, anggotaList);
+                    setTemplateMenuOpen(false);
+                  }}
+                  className="w-full px-3.5 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-[#eff6ff] hover:text-[#2563eb] flex items-center gap-2 cursor-pointer transition-colors"
+                >
+                  <span className="material-symbols-outlined text-base text-[#047857]">description</span>
+                  <span>Template Excel (.xls)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    downloadTemplateSimpananMultiCsv(settings, anggotaList);
+                    setTemplateMenuOpen(false);
+                  }}
+                  className="w-full px-3.5 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-[#eff6ff] hover:text-[#2563eb] flex items-center gap-2 cursor-pointer transition-colors"
+                >
+                  <span className="material-symbols-outlined text-base text-slate-500">table_chart</span>
+                  <span>Template CSV (.csv)</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Tombol Import Transaksi */}
+          <button
+            type="button"
+            onClick={() => setImportModalOpen(true)}
+            className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-full px-4 py-2 text-xs font-extrabold flex items-center gap-1.5 shadow-sm hover:shadow-md transition-all cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-lg">file_upload</span>
+            <span>Import Transaksi</span>
+          </button>
+
+          {/* Tombol Unduh Laporan */}
+          <Link
+            href="/laporan"
+            className="px-4 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-base">download</span>
+            <span>Unduh Laporan</span>
+          </Link>
+        </div>
       }
     >
       <div className="flex flex-col gap-6">
@@ -426,6 +497,26 @@ export default function HomePage() {
         </div>
 
       </div>
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-20 right-6 z-50 bg-[#2563eb] text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-bold animate-in fade-in">
+          <span className="material-symbols-outlined text-base text-[#ffd159]">check_circle</span>
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* MODAL IMPORT TRANSAKSI SIMPANAN (BERANDA) */}
+      <ImportTransactionModal
+        isOpen={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        settings={settings}
+        anggotaList={anggotaList}
+        onSuccess={({ countMembers, countTransactions, grandTotal }) => {
+          loadDashboardData();
+          showToast(`Berhasil mengimpor setoran simpanan untuk ${countMembers} anggota (${countTransactions} transaksi) senilai ${formatRupiah(grandTotal)}!`);
+        }}
+      />
     </AppLayout>
   );
 }

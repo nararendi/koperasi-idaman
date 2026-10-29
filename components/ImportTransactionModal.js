@@ -2,12 +2,9 @@
 
 import { useState, useRef } from 'react';
 import {
-  downloadTemplateKasExcel,
-  downloadTemplateKasCsv,
-  downloadTemplateSimpananExcel,
-  downloadTemplateSimpananCsv,
-  processKasImportFile,
-  processSimpananImportFile
+  downloadTemplateSimpananMultiExcel,
+  downloadTemplateSimpananMultiCsv,
+  processMultiSimpananImportFile
 } from '../lib/transactionImport';
 import { dataService } from '../lib/dataService';
 import { formatRupiah, formatNominal } from '../lib/formatters';
@@ -15,7 +12,6 @@ import { formatRupiah, formatNominal } from '../lib/formatters';
 export default function ImportTransactionModal({
   isOpen,
   onClose,
-  type = 'kas', // 'kas' | 'simpanan'
   settings = {},
   anggotaList = [],
   onSuccess
@@ -31,12 +27,6 @@ export default function ImportTransactionModal({
   const fileInputRef = useRef(null);
 
   if (!isOpen) return null;
-
-  const isKas = type === 'kas';
-  const modalTitle = isKas ? 'Import Transaksi Kas Harian' : 'Import Transaksi Simpanan Anggota';
-  const modalSubtitle = isKas
-    ? 'Unggah mutasi kas masuk dan keluar secara massal via file Excel atau CSV'
-    : 'Unggah setoran dan penarikan simpanan anggota koperasi secara massal';
 
   // Handle Drag & Drop
   const handleDragOver = (e) => {
@@ -71,12 +61,7 @@ export default function ImportTransactionModal({
     setParseResult(null);
 
     try {
-      let result;
-      if (isKas) {
-        result = await processKasImportFile(selectedFile);
-      } else {
-        result = await processSimpananImportFile(selectedFile, anggotaList);
-      }
+      const result = await processMultiSimpananImportFile(selectedFile, anggotaList);
       setParseResult(result);
     } catch (err) {
       console.error('Import parse error:', err);
@@ -96,19 +81,11 @@ export default function ImportTransactionModal({
   };
 
   const handleDownloadTemplateExcel = () => {
-    if (isKas) {
-      downloadTemplateKasExcel(settings);
-    } else {
-      downloadTemplateSimpananExcel(settings, anggotaList);
-    }
+    downloadTemplateSimpananMultiExcel(settings, anggotaList);
   };
 
   const handleDownloadTemplateCsv = () => {
-    if (isKas) {
-      downloadTemplateKasCsv();
-    } else {
-      downloadTemplateSimpananCsv(anggotaList);
-    }
+    downloadTemplateSimpananMultiCsv(settings, anggotaList);
   };
 
   const handleExecuteImport = async () => {
@@ -127,33 +104,18 @@ export default function ImportTransactionModal({
 
     setIsSubmitting(true);
     try {
-      if (isKas) {
-        const res = await dataService.importKasTransactions(itemsToImport);
-        if (res.success) {
-          if (onSuccess) {
-            onSuccess({
-              count: itemsToImport.length,
-              totalMasuk: parseResult.totalMasuk,
-              totalKeluar: parseResult.totalKeluar
-            });
-          }
-          onClose();
-        } else {
-          alert('Gagal mengimpor: ' + (res.message || 'Terjadi kesalahan sistem'));
+      const res = await dataService.importMultiSimpananTransactions(itemsToImport);
+      if (res.success) {
+        if (onSuccess) {
+          onSuccess({
+            countMembers: itemsToImport.length,
+            countTransactions: res.countTransactions,
+            grandTotal: parseResult.grandTotal
+          });
         }
+        onClose();
       } else {
-        const res = await dataService.importSimpananTransactions(itemsToImport);
-        if (res.success) {
-          if (onSuccess) {
-            onSuccess({
-              count: itemsToImport.length,
-              grandTotal: parseResult.grandTotal
-            });
-          }
-          onClose();
-        } else {
-          alert('Gagal mengimpor: ' + (res.message || 'Terjadi kesalahan sistem'));
-        }
+        alert('Gagal mengimpor: ' + (res.message || 'Terjadi kesalahan sistem'));
       }
     } catch (err) {
       alert('Terjadi kesalahan saat menyimpan data: ' + err.message);
@@ -179,8 +141,10 @@ export default function ImportTransactionModal({
               <span className="material-symbols-outlined text-2xl text-[#ffd159]">file_upload</span>
             </div>
             <div>
-              <h3 className="text-base sm:text-lg font-extrabold tracking-tight">{modalTitle}</h3>
-              <p className="text-[11px] text-blue-100/90 font-medium">{modalSubtitle}</p>
+              <h3 className="text-base sm:text-lg font-extrabold tracking-tight">Import Transaksi Simpanan Anggota</h3>
+              <p className="text-[11px] text-blue-100/90 font-medium">
+                Setoran massal Simpanan Pokok, Wajib, dan Sukarela via Spreadsheet Excel / CSV
+              </p>
             </div>
           </div>
           <button
@@ -199,9 +163,9 @@ export default function ImportTransactionModal({
             <div className="flex items-start gap-3">
               <span className="material-symbols-outlined text-xl text-[#2563eb] shrink-0 mt-0.5">info</span>
               <div>
-                <h4 className="font-extrabold text-[#1e3a8a] text-xs">Belum memiliki format data transaksi?</h4>
+                <h4 className="font-extrabold text-[#1e3a8a] text-xs">Template Simpanan Siap Pakai (No & Nama Anggota Sudah Terisi)</h4>
                 <p className="text-[11px] text-slate-600 mt-0.5">
-                  Unduh template resmi berformat rapi, lengkapi baris data, lalu unggah kembali ke sini.
+                  Unduh template resmi di bawah. Seluruh nama anggota koperasi sudah otomatis tersedia, Anda tinggal mengisi tanggal dan nominal setoran!
                 </p>
               </div>
             </div>
@@ -210,7 +174,7 @@ export default function ImportTransactionModal({
                 type="button"
                 onClick={handleDownloadTemplateExcel}
                 className="flex-1 sm:flex-initial px-3.5 py-2 bg-white hover:bg-slate-50 border border-[#2563eb]/30 text-[#2563eb] rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-                title="Unduh format Microsoft Excel (.xls)"
+                title="Unduh template Excel dengan daftar anggota lengkap"
               >
                 <span className="material-symbols-outlined text-base text-[#047857]">description</span>
                 Template Excel (.xls)
@@ -219,7 +183,7 @@ export default function ImportTransactionModal({
                 type="button"
                 onClick={handleDownloadTemplateCsv}
                 className="flex-1 sm:flex-initial px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-                title="Unduh format teks koma (.csv)"
+                title="Unduh template CSV"
               >
                 <span className="material-symbols-outlined text-base text-slate-500">table_chart</span>
                 Template CSV
@@ -252,7 +216,7 @@ export default function ImportTransactionModal({
               </div>
               <div>
                 <h4 className="font-extrabold text-sm text-[#0f172a]">
-                  Pilih atau seret file transaksi ke area ini
+                  Pilih atau seret file transaksi simpanan ke area ini
                 </h4>
                 <p className="text-[11px] text-slate-400 mt-1">
                   Mendukung file Microsoft Excel (<span className="font-semibold text-slate-600">.xlsx, .xls</span>) dan <span className="font-semibold text-slate-600">.csv</span>
@@ -262,7 +226,7 @@ export default function ImportTransactionModal({
                 type="button"
                 className="mt-2 px-5 py-2 bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-full font-extrabold text-xs shadow-sm transition-all cursor-pointer"
               >
-                Jelajahi File Komputer
+                Pilih File dari Komputer
               </button>
             </div>
           ) : (
@@ -292,7 +256,7 @@ export default function ImportTransactionModal({
           {isParsing && (
             <div className="p-8 text-center bg-[#f8fafc] rounded-2xl border border-slate-100 flex flex-col items-center justify-center gap-2">
               <div className="w-8 h-8 border-3 border-[#2563eb]/20 border-t-[#2563eb] rounded-full animate-spin"></div>
-              <span className="text-xs font-bold text-slate-600">Memindai dan memvalidasi baris data transaksi...</span>
+              <span className="text-xs font-bold text-slate-600">Memvalidasi data simpanan anggota...</span>
             </div>
           )}
 
@@ -311,43 +275,31 @@ export default function ImportTransactionModal({
           {parseResult && (
             <div className="flex flex-col gap-4 animate-fade-in">
               {/* METRIC CARDS */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Baris</span>
-                  <div className="text-lg font-extrabold text-[#0f172a] mt-0.5">{parseResult.totalRows} Baris</div>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Anggota</span>
+                  <div className="text-base font-extrabold text-[#0f172a] mt-0.5">{parseResult.validCount} Valid</div>
                 </div>
 
-                <div className="bg-[#ecfdf5] p-3.5 rounded-2xl border border-emerald-200 shadow-2xs">
-                  <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">Data Valid</span>
-                  <div className="text-lg font-extrabold text-emerald-700 mt-0.5">{parseResult.validCount} Siap Impor</div>
+                <div className="bg-[#eff6ff] p-3 rounded-2xl border border-[#bfdbfe] shadow-2xs">
+                  <span className="text-[10px] font-bold text-[#1e40af] uppercase tracking-wider block">Simp. Pokok</span>
+                  <div className="text-xs font-extrabold text-[#1e40af] mt-0.5">{formatRupiah(parseResult.totalPokok)}</div>
                 </div>
 
-                <div className={`p-3.5 rounded-2xl border shadow-2xs ${
-                  parseResult.invalidCount > 0 ? 'bg-[#fff1f2] border-rose-200' : 'bg-slate-50 border-slate-200'
-                }`}>
-                  <span className={`text-[10px] font-bold uppercase tracking-wider block ${
-                    parseResult.invalidCount > 0 ? 'text-rose-600' : 'text-slate-400'
-                  }`}>Data Bermasalah</span>
-                  <div className={`text-lg font-extrabold mt-0.5 ${
-                    parseResult.invalidCount > 0 ? 'text-rose-700' : 'text-slate-400'
-                  }`}>{parseResult.invalidCount} Baris</div>
+                <div className="bg-[#ecfdf5] p-3 rounded-2xl border border-emerald-200 shadow-2xs">
+                  <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">Simp. Wajib</span>
+                  <div className="text-xs font-extrabold text-emerald-700 mt-0.5">{formatRupiah(parseResult.totalWajib)}</div>
                 </div>
 
-                {isKas ? (
-                  <div className="bg-[#eff6ff] p-3.5 rounded-2xl border border-[#bfdbfe] shadow-2xs">
-                    <span className="text-[10px] font-bold text-[#2563eb] uppercase tracking-wider block">Estimasi Arus Kas</span>
-                    <div className="text-xs font-extrabold text-[#2563eb] mt-0.5">
-                      +{formatNominal(parseResult.totalMasuk)} / -{formatNominal(parseResult.totalKeluar)}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bg-[#eff6ff] p-3.5 rounded-2xl border border-[#bfdbfe] shadow-2xs">
-                    <span className="text-[10px] font-bold text-[#2563eb] uppercase tracking-wider block">Total Nominal</span>
-                    <div className="text-sm font-extrabold text-[#2563eb] mt-0.5">
-                      {formatRupiah(parseResult.grandTotal)}
-                    </div>
-                  </div>
-                )}
+                <div className="bg-[#fefce8] p-3 rounded-2xl border border-amber-200 shadow-2xs">
+                  <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block">Simp. Sukarela</span>
+                  <div className="text-xs font-extrabold text-amber-700 mt-0.5">{formatRupiah(parseResult.totalSukarela)}</div>
+                </div>
+
+                <div className="bg-gradient-to-br from-[#1d4ed8] to-[#2563eb] text-white p-3 rounded-2xl shadow-2xs col-span-2 sm:col-span-1">
+                  <span className="text-[10px] font-bold text-blue-100 uppercase tracking-wider block">Grand Total</span>
+                  <div className="text-xs sm:text-sm font-extrabold text-[#ffd159] mt-0.5">{formatRupiah(parseResult.grandTotal)}</div>
+                </div>
               </div>
 
               {/* TABLE FILTER TABS & CONTROL */}
@@ -398,122 +350,82 @@ export default function ImportTransactionModal({
                       onChange={(e) => setSkipErrors(e.target.checked)}
                       className="rounded text-[#2563eb] focus:ring-[#2563eb] w-4 h-4"
                     />
-                    <span>Abaikan baris bermasalah dan impor baris valid</span>
+                    <span>Lewati baris bermasalah & impor baris yang valid</span>
                   </label>
                 )}
               </div>
 
               {/* LIVE PREVIEW TABLE */}
-              <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-60 overflow-y-auto shadow-inner bg-white">
+              <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-64 overflow-y-auto shadow-inner bg-white">
                 <table className="w-full text-left border-collapse text-[11px]">
                   <thead className="bg-[#f8fafc] sticky top-0 z-10 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
                     <tr>
-                      <th className="px-3 py-2.5 text-center w-12">#</th>
+                      <th className="px-3 py-2.5 text-center w-10">#</th>
                       <th className="px-3 py-2.5">Status</th>
+                      <th className="px-3 py-2.5">No. Anggota</th>
+                      <th className="px-3 py-2.5">Nama Anggota</th>
                       <th className="px-3 py-2.5">Tanggal</th>
-                      {isKas ? (
-                        <>
-                          <th className="px-3 py-2.5">Jenis</th>
-                          <th className="px-3 py-2.5">Kategori</th>
-                          <th className="px-3 py-2.5 text-right">Nominal</th>
-                          <th className="px-3 py-2.5">Keterangan</th>
-                        </>
-                      ) : (
-                        <>
-                          <th className="px-3 py-2.5">Anggota</th>
-                          <th className="px-3 py-2.5">Simpanan</th>
-                          <th className="px-3 py-2.5">Tipe</th>
-                          <th className="px-3 py-2.5 text-right">Nominal</th>
-                        </>
-                      )}
+                      <th className="px-3 py-2.5 text-right">Pokok</th>
+                      <th className="px-3 py-2.5 text-right">Wajib</th>
+                      <th className="px-3 py-2.5 text-right">Sukarela</th>
+                      <th className="px-3 py-2.5 text-right font-extrabold text-[#2563eb]">Total Setoran</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {displayItems.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
+                        <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
                           Tidak ada data yang sesuai filter.
                         </td>
                       </tr>
                     ) : (
-                      displayItems.map((item, idx) => {
-                        const isPenerimaan = item.jenis === 'Penerimaan' || item.tipe === 'Setoran';
-                        return (
-                          <tr
-                            key={idx}
-                            className={`transition-colors ${
-                              !item.isValid ? 'bg-[#fff1f2]/50 hover:bg-[#fff1f2]' : 'hover:bg-[#f8fafc]'
-                            }`}
-                          >
-                            <td className="px-3 py-2 text-center text-slate-400 font-mono font-medium">
-                              {item.rowNumber}
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              {item.isValid ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-extrabold text-[9px] uppercase">
-                                  Valid
-                                </span>
-                              ) : (
-                                <span
-                                  className="inline-flex items-center px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 font-extrabold text-[9px] uppercase"
-                                  title={(item.errors || []).join(', ')}
-                                >
-                                  Error
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap text-slate-600 font-medium">
-                              {item.tanggal}
-                            </td>
-
-                            {isKas ? (
-                              <>
-                                <td className="px-3 py-2 whitespace-nowrap">
-                                  <span
-                                    className={`inline-flex items-center px-2 py-0.5 rounded-full font-extrabold text-[9px] uppercase ${
-                                      isPenerimaan ? 'bg-[#eff6ff] text-[#2563eb]' : 'bg-[#fff1f2] text-rose-600'
-                                    }`}
-                                  >
-                                    {isPenerimaan ? 'Masuk' : 'Keluar'}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2 font-bold text-[#0f172a] whitespace-nowrap">
-                                  {item.kategori}
-                                </td>
-                                <td className={`px-3 py-2 text-right font-extrabold whitespace-nowrap ${
-                                  isPenerimaan ? 'text-[#2563eb]' : 'text-rose-600'
-                                }`}>
-                                  {formatRupiah(item.jumlah)}
-                                </td>
-                                <td className="px-3 py-2 text-slate-600 max-w-xs truncate" title={item.keterangan}>
-                                  {item.keterangan}
-                                </td>
-                              </>
+                      displayItems.map((item, idx) => (
+                        <tr
+                          key={idx}
+                          className={`transition-colors ${
+                            !item.isValid ? 'bg-[#fff1f2]/50 hover:bg-[#fff1f2]' : 'hover:bg-[#f8fafc]'
+                          }`}
+                        >
+                          <td className="px-3 py-2 text-center text-slate-400 font-mono font-medium">
+                            {item.rowNumber}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {item.isValid ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-extrabold text-[9px] uppercase">
+                                Valid
+                              </span>
                             ) : (
-                              <>
-                                <td className="px-3 py-2 font-bold text-[#0f172a] whitespace-nowrap">
-                                  {item.nama_anggota} ({item.nomor_anggota})
-                                </td>
-                                <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-700">
-                                  {item.jenis}
-                                </td>
-                                <td className="px-3 py-2 whitespace-nowrap">
-                                  <span
-                                    className={`inline-flex items-center px-2 py-0.5 rounded-full font-extrabold text-[9px] uppercase ${
-                                      isPenerimaan ? 'bg-[#eff6ff] text-[#2563eb]' : 'bg-[#fff1f2] text-rose-600'
-                                    }`}
-                                  >
-                                    {item.tipe}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2 text-right font-extrabold text-[#2563eb] whitespace-nowrap">
-                                  {formatRupiah(item.jumlah)}
-                                </td>
-                              </>
+                              <span
+                                className="inline-flex items-center px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 font-extrabold text-[9px] uppercase"
+                                title={(item.errors || []).join(', ')}
+                              >
+                                Error
+                              </span>
                             )}
-                          </tr>
-                        );
-                      })
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap font-mono font-bold text-slate-700">
+                            {item.nomor_anggota}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap font-bold text-[#0f172a]">
+                            {item.nama_anggota}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-slate-600 font-medium">
+                            {item.tanggal}
+                          </td>
+                          <td className="px-3 py-2 text-right whitespace-nowrap text-slate-600">
+                            {item.pokok > 0 ? formatRupiah(item.pokok) : '-'}
+                          </td>
+                          <td className="px-3 py-2 text-right whitespace-nowrap text-emerald-700 font-semibold">
+                            {item.wajib > 0 ? formatRupiah(item.wajib) : '-'}
+                          </td>
+                          <td className="px-3 py-2 text-right whitespace-nowrap text-amber-700 font-semibold">
+                            {item.sukarela > 0 ? formatRupiah(item.sukarela) : '-'}
+                          </td>
+                          <td className="px-3 py-2 text-right whitespace-nowrap font-extrabold text-[#2563eb]">
+                            {formatRupiah(item.totalSetoran)}
+                          </td>
+                        </tr>
+                      ))
                     )}
                   </tbody>
                 </table>
@@ -552,7 +464,7 @@ export default function ImportTransactionModal({
                 <>
                   <span className="material-symbols-outlined text-lg">check_circle</span>
                   <span>
-                    Import Sekarang ({parseResult ? parseResult.validCount : 0} Data Valid)
+                    Import Sekarang ({parseResult ? parseResult.validCount : 0} Anggota)
                   </span>
                 </>
               )}
