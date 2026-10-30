@@ -1,4 +1,4 @@
-// File: C:\Users\narar\.gemini\antigravity-ide\scratch\app\pengaturan\page.js
+// File: D:\RUANG KERJA\APLIKASI SENDIRI\koperasi-idaman\koperasi-idaman\app\pengaturan\page.js
 import * as entry from '../../../../app/pengaturan/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

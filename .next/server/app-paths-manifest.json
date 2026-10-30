@@ -1,10 +1,14 @@
 {
-  "/simpanan/page": "app/simpanan/page.js",
-  "/page": "app/page.js",
+  "/_not-found/page": "app/_not-found/page.js",
   "/anggota/page": "app/anggota/page.js",
-  "/pinjaman/page": "app/pinjaman/page.js",
   "/kas/page": "app/kas/page.js",
-  "/laporan/page": "app/laporan/page.js",
   "/anggota/tambah/page": "app/anggota/tambah/page.js",
-  "/pengaturan/page": "app/pengaturan/page.js"
+  "/login/page": "app/login/page.js",
+  "/laporan/page": "app/laporan/page.js",
+  "/pengaturan/page": "app/pengaturan/page.js",
+  "/page": "app/page.js",
+  "/pinjaman/page": "app/pinjaman/page.js",
+  "/simpanan/page": "app/simpanan/page.js",
+  "/tagihan/page": "app/tagihan/page.js",
+  "/usaha/page": "app/usaha/page.js"
 }

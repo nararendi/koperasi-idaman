@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { authService } from '../lib/authService';
 import { dataService } from '../lib/dataService';
+import { getSupabaseClient } from '../lib/supabase';
 import AppLogo from './AppLogo';
 
 export default function AppLayout({ children, title, subtitle, rightAction }) {
@@ -14,6 +15,7 @@ export default function AppLayout({ children, title, subtitle, rightAction }) {
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     const user = authService.getCurrentUser();
@@ -28,8 +30,40 @@ export default function AppLayout({ children, title, subtitle, rightAction }) {
     setIsAuthReady(true);
 
     // Auto sync data dari Supabase Cloud setiap kali aplikasi dibuka
-    dataService.fetchFromSupabase().catch(() => {});
-    authService.fetchUsersFromSupabase().catch(() => {});
+    const syncCloud = async () => {
+      setIsSyncing(true);
+      try {
+        await dataService.fetchFromSupabase();
+        await authService.fetchUsersFromSupabase();
+      } catch (_) {}
+      setIsSyncing(false);
+    };
+
+    syncCloud();
+
+    // Supabase Realtime Subscription: Update otomatis setiap kali ada perubahan di komputer lain
+    const client = getSupabaseClient();
+    let channel = null;
+    if (client) {
+      try {
+        channel = client
+          .channel('realtime_koperasi_changes')
+          .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+            syncCloud();
+          })
+          .subscribe();
+      } catch (err) {
+        console.warn('Realtime subscription error:', err);
+      }
+    }
+
+    // Auto re-sync saat jendela browser kembali aktif (focus / switch tab)
+    const handleWindowFocus = () => syncCloud();
+    window.addEventListener('focus', handleWindowFocus);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') syncCloud();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
 
     const handleAuthUpdate = () => {
       const u = authService.getCurrentUser();
@@ -44,8 +78,24 @@ export default function AppLayout({ children, title, subtitle, rightAction }) {
     };
 
     window.addEventListener('koperasi_auth_updated', handleAuthUpdate);
-    return () => window.removeEventListener('koperasi_auth_updated', handleAuthUpdate);
+    return () => {
+      window.removeEventListener('koperasi_auth_updated', handleAuthUpdate);
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      if (channel && client) {
+        client.removeChannel(channel);
+      }
+    };
   }, [pathname, router]);
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    try {
+      await dataService.fetchFromSupabase();
+      await authService.fetchUsersFromSupabase();
+    } catch (_) {}
+    setIsSyncing(false);
+  };
 
   const handleLogoutConfirm = () => {
     authService.logout();
@@ -164,6 +214,17 @@ export default function AppLayout({ children, title, subtitle, rightAction }) {
         <div className="flex items-center gap-2">
           <button
             type="button"
+            onClick={handleManualSync}
+            disabled={isSyncing}
+            className="p-1.5 rounded-lg bg-white/10 text-white hover:bg-white/20 cursor-pointer disabled:opacity-50"
+            title="Sinkronkan Cloud"
+          >
+            <span className={`material-symbols-outlined text-lg ${isSyncing ? 'animate-spin' : ''}`}>
+              {isSyncing ? 'sync' : 'cloud_sync'}
+            </span>
+          </button>
+          <button
+            type="button"
             onClick={() => setLogoutModalOpen(true)}
             className="p-1.5 rounded-lg bg-white/10 text-white hover:bg-white/20 cursor-pointer"
             title="Logout"
@@ -237,9 +298,21 @@ export default function AppLayout({ children, title, subtitle, rightAction }) {
                 )}
               </div>
 
-              {rightAction && (
-                <div className="flex items-center gap-2 shrink-0">{rightAction}</div>
-              )}
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleManualSync}
+                  disabled={isSyncing}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-full text-xs font-bold transition-all shadow-2xs cursor-pointer disabled:opacity-60"
+                  title="Sinkronkan data dengan Supabase Cloud sekarang"
+                >
+                  <span className={`material-symbols-outlined text-[16px] ${isSyncing ? 'animate-spin text-[#2563eb]' : 'text-emerald-500'}`}>
+                    {isSyncing ? 'sync' : 'cloud_sync'}
+                  </span>
+                  <span className="hidden sm:inline">{isSyncing ? 'Menyinkronkan...' : 'Sinkron Cloud'}</span>
+                </button>
+                {rightAction}
+              </div>
             </div>
           )}
 

@@ -1,1 +1,1 @@
-self.__REACT_LOADABLE_MANIFEST="{}"
+self.__REACT_LOADABLE_MANIFEST='{"app\\\\pengaturan\\\\page.js -> ../../lib/supabase":{"id":2009,"files":[]}}';
