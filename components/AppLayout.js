@@ -65,6 +65,11 @@ export default function AppLayout({ children, title, subtitle, rightAction }) {
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
+    // Polling otomatis setiap 8 detik di latar belakang (memastikan sinkronisasi 100% tanpa tombol)
+    const pollInterval = setInterval(() => {
+      syncCloud();
+    }, 8000);
+
     const handleAuthUpdate = () => {
       const u = authService.getCurrentUser();
       if (!u && pathname !== '/login') {
@@ -82,6 +87,7 @@ export default function AppLayout({ children, title, subtitle, rightAction }) {
       window.removeEventListener('koperasi_auth_updated', handleAuthUpdate);
       window.removeEventListener('focus', handleWindowFocus);
       document.removeEventListener('visibilitychange', handleVisibility);
+      clearInterval(pollInterval);
       if (channel && client) {
         client.removeChannel(channel);
       }
@@ -212,17 +218,11 @@ export default function AppLayout({ children, title, subtitle, rightAction }) {
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleManualSync}
-            disabled={isSyncing}
-            className="p-1.5 rounded-lg bg-white/10 text-white hover:bg-white/20 cursor-pointer disabled:opacity-50"
-            title="Sinkronkan Cloud"
-          >
-            <span className={`material-symbols-outlined text-lg ${isSyncing ? 'animate-spin' : ''}`}>
-              {isSyncing ? 'sync' : 'cloud_sync'}
-            </span>
-          </button>
+          {/* Realtime Live Status Indicator (Mobile) */}
+          <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-white/10 text-[10px] font-bold text-white/90">
+            <span className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-amber-400 animate-ping' : 'bg-emerald-400 animate-pulse'}`}></span>
+            <span>{isSyncing ? 'Sync...' : 'Online'}</span>
+          </div>
           <button
             type="button"
             onClick={() => setLogoutModalOpen(true)}
@@ -299,18 +299,14 @@ export default function AppLayout({ children, title, subtitle, rightAction }) {
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={handleManualSync}
-                  disabled={isSyncing}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-full text-xs font-bold transition-all shadow-2xs cursor-pointer disabled:opacity-60"
-                  title="Sinkronkan data dengan Supabase Cloud sekarang"
+                {/* Otomatis Realtime Cloud Indicator (Tanpa Tombol Manual) */}
+                <div 
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 border border-emerald-200/80 text-emerald-700 rounded-full text-[11px] font-bold shadow-2xs select-none"
+                  title="Koneksi Cloud Realtime Aktif: Setiap input oleh bendahara langsung tersimpan otomatis ke seluruh komputer tanpa perlu klik sync"
                 >
-                  <span className={`material-symbols-outlined text-[16px] ${isSyncing ? 'animate-spin text-[#2563eb]' : 'text-emerald-500'}`}>
-                    {isSyncing ? 'sync' : 'cloud_sync'}
-                  </span>
-                  <span className="hidden sm:inline">{isSyncing ? 'Menyinkronkan...' : 'Sinkron Cloud'}</span>
-                </button>
+                  <span className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-amber-500 animate-ping' : 'bg-emerald-500 animate-pulse'}`}></span>
+                  <span className="hidden sm:inline">{isSyncing ? 'Sinkronisasi Otomatis...' : 'Cloud Realtime'}</span>
+                </div>
                 {rightAction}
               </div>
             </div>

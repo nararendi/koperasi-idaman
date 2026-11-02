@@ -250,12 +250,15 @@ export default function PengaturanPage() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const content = event.target.result;
-      const res = dataService.importDatabaseJSON(content);
+      setSyncLoading(true);
+      const res = await dataService.importDatabaseJSON(content);
+      setSyncLoading(false);
       if (res.success) {
         setFormData(dataService.getSettings());
-        showToast('Database berhasil dipulihkan dari file backup!');
+        showToast('Database berhasil dipulihkan & disinkronkan ke Cloud Supabase!');
+        loadData();
       } else {
         alert('Gagal memulihkan database: ' + res.message);
       }
